@@ -20,26 +20,34 @@ const LOG_IPC = DEV && import.meta.env.VITE_IPC_LOG !== "false";
 /** Wrapper around Tauri's error that preserves the Rust `code` field. */
 export class IPCError extends Error {
   readonly code: AppError["code"];
-  constructor(err: AppError) {
-    super(err.message);
+  constructor(err: AppError, options?: ErrorOptions) {
+    super(err.message, options);
     this.code = err.code;
     this.name = "IPCError";
   }
 }
 
-async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+/** Map a raw value thrown by `invoke()` into a typed error. Pure + testable:
+ *  Tauri rethrows a serialised `AppError` as a plain `{ code, message }`. */
+export function toIPCError(raw: unknown): Error {
+  if (raw && typeof raw === "object" && "code" in raw && "message" in raw) {
+    return new IPCError(raw as AppError, { cause: raw });
+  }
+  if (raw instanceof Error) return raw;
+  return new Error(String(raw), { cause: raw });
+}
+
+async function call<T>(
+  cmd: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   if (LOG_IPC) console.debug(`[ipc] → ${cmd}`, args);
   try {
     const out = await invoke<T>(cmd, args);
     if (LOG_IPC) console.debug(`[ipc] ← ${cmd}`, out);
     return out;
   } catch (raw) {
-    // Tauri rethrows a serialised AppError as a plain object
-    if (raw && typeof raw === "object" && "code" in raw && "message" in raw) {
-      throw new IPCError(raw as AppError);
-    }
-    if (raw instanceof Error) throw raw;
-    throw new Error(String(raw));
+    throw toIPCError(raw);
   }
 }
 

@@ -29,14 +29,17 @@ function App() {
 }
 
 function Placeholder({ route }: { route: Exclude<Route, "dashboard"> }) {
-  const titles: Record<Exclude<Route, "dashboard">, { title: string; phase: string }> = {
-    library:  { title: "Ressursbibliotek", phase: "Phase 2.3" },
-    builder:  { title: "Dokumentbygger",   phase: "Phase 4.3" },
-    splitter: { title: "Sangbok-klipper",  phase: "Phase 3" },
-    editor:   { title: "PDF-editor",       phase: "Phase 7.1" },
-    forms:    { title: "Skjema",           phase: "Phase 7.2" },
-    export:   { title: "Eksport",          phase: "Phase 6" },
-    settings: { title: "Innstillinger",    phase: "Phase 9" },
+  const titles: Record<
+    Exclude<Route, "dashboard">,
+    { title: string; phase: string }
+  > = {
+    library: { title: "Ressursbibliotek", phase: "Phase 2.3" },
+    builder: { title: "Dokumentbygger", phase: "Phase 4.3" },
+    splitter: { title: "Sangbok-klipper", phase: "Phase 3" },
+    editor: { title: "PDF-editor", phase: "Phase 7.1" },
+    forms: { title: "Skjema", phase: "Phase 7.2" },
+    export: { title: "Eksport", phase: "Phase 6" },
+    settings: { title: "Innstillinger", phase: "Phase 9" },
   };
   const info = titles[route];
 
@@ -46,7 +49,9 @@ function Placeholder({ route }: { route: Exclude<Route, "dashboard"> }) {
         <div className="mb-2 text-xs font-medium uppercase tracking-widest text-[var(--color-accent)]">
           {info.phase}
         </div>
-        <h1 className="mb-2 text-[var(--text-ui-2xl)] font-bold">{info.title}</h1>
+        <h1 className="mb-2 text-[var(--text-ui-2xl)] font-bold">
+          {info.title}
+        </h1>
         <p className="text-sm text-[var(--color-fg-muted)]">
           Denne siden er planlagt for {info.phase}. Scaffolding er på plass —
           implementasjon kommer i senere fase.

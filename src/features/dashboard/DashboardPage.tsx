@@ -35,7 +35,10 @@ export function DashboardPage() {
 
         <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-5 shadow-[var(--shadow-soft)]">
           {infoQuery.isPending ? (
-            <Row icon={<Loader2 size={16} className="animate-spin" />} tone="muted">
+            <Row
+              icon={<Loader2 size={16} className="animate-spin" />}
+              tone="muted"
+            >
               Kobler til backend…
             </Row>
           ) : infoQuery.isError ? (
@@ -51,8 +54,8 @@ export function DashboardPage() {
                 {infoQuery.data.greeting}
               </Row>
               <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                <Field label="Versjon"  value={`v${infoQuery.data.version}`} />
-                <Field label="Tauri"    value={infoQuery.data.tauri_version} />
+                <Field label="Versjon" value={`v${infoQuery.data.version}`} />
+                <Field label="Tauri" value={infoQuery.data.tauri_version} />
                 <Field label="Plattform" value={infoQuery.data.platform} />
                 <Field label="Arkitektur" value={infoQuery.data.arch} />
               </dl>

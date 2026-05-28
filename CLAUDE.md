@@ -11,9 +11,9 @@ sheets, posters, forms, and split/merge/OCR jobs on existing PDFs.
   (liturgy, song, scripture reading, announcement, image, QR) bound to
   **DATA SOURCES**. The PDF is RENDERED from that tree.
 - Two directions:
-    - **FORWARD** (generate): intent/data → block tree → PDF
-    - **BACKWARD** (ingest): arbitrary PDF → split / OCR / merge / edit →
-      feeds the ASSET LIBRARY
+  - **FORWARD** (generate): intent/data → block tree → PDF
+  - **BACKWARD** (ingest): arbitrary PDF → split / OCR / merge / edit →
+    feeds the ASSET LIBRARY
 - A persistent **Asset Library** (logo, templates, song catalog, recurring
   blocks, fonts) means next Sunday's material is produced in seconds.
 

@@ -29,13 +29,13 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS: Array<{ id: Route; label: string; icon: typeof Library }> = [
-  { id: "dashboard", label: "Dashbord",  icon: LayoutDashboard },
-  { id: "library",   label: "Bibliotek", icon: Library },
-  { id: "builder",   label: "Bygger",    icon: LayoutTemplate },
-  { id: "splitter",  label: "Klipper",   icon: Scissors },
-  { id: "editor",    label: "Editor",    icon: FileText },
-  { id: "forms",     label: "Skjema",    icon: ClipboardList },
-  { id: "export",    label: "Eksport",   icon: Download },
+  { id: "dashboard", label: "Dashbord", icon: LayoutDashboard },
+  { id: "library", label: "Bibliotek", icon: Library },
+  { id: "builder", label: "Bygger", icon: LayoutTemplate },
+  { id: "splitter", label: "Klipper", icon: Scissors },
+  { id: "editor", label: "Editor", icon: FileText },
+  { id: "forms", label: "Skjema", icon: ClipboardList },
+  { id: "export", label: "Eksport", icon: Download },
 ];
 
 export function Sidebar({ current, onNavigate, onNewDocument }: SidebarProps) {

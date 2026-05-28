@@ -78,23 +78,69 @@ export function CommandPalette({ onNavigate }: CommandPaletteProps) {
             heading="Naviger"
             className="text-xs font-medium uppercase tracking-wider text-[var(--color-fg-muted)] mb-1 mt-2 px-2"
           >
-            <Item onSelect={() => go("dashboard")} icon={<LayoutDashboard size={14} />} label="Dashbord" />
-            <Item onSelect={() => go("library")}   icon={<Library size={14} />}         label="Bibliotek" />
-            <Item onSelect={() => go("builder")}   icon={<LayoutTemplate size={14} />}  label="Bygger" />
-            <Item onSelect={() => go("splitter")}  icon={<Scissors size={14} />}        label="Klipper" />
-            <Item onSelect={() => go("editor")}    icon={<FileText size={14} />}        label="Editor" />
-            <Item onSelect={() => go("forms")}     icon={<ClipboardList size={14} />}   label="Skjema" />
-            <Item onSelect={() => go("export")}    icon={<Download size={14} />}        label="Eksport" />
-            <Item onSelect={() => go("settings")}  icon={<Settings size={14} />}        label="Innstillinger" />
+            <Item
+              onSelect={() => go("dashboard")}
+              icon={<LayoutDashboard size={14} />}
+              label="Dashbord"
+            />
+            <Item
+              onSelect={() => go("library")}
+              icon={<Library size={14} />}
+              label="Bibliotek"
+            />
+            <Item
+              onSelect={() => go("builder")}
+              icon={<LayoutTemplate size={14} />}
+              label="Bygger"
+            />
+            <Item
+              onSelect={() => go("splitter")}
+              icon={<Scissors size={14} />}
+              label="Klipper"
+            />
+            <Item
+              onSelect={() => go("editor")}
+              icon={<FileText size={14} />}
+              label="Editor"
+            />
+            <Item
+              onSelect={() => go("forms")}
+              icon={<ClipboardList size={14} />}
+              label="Skjema"
+            />
+            <Item
+              onSelect={() => go("export")}
+              icon={<Download size={14} />}
+              label="Eksport"
+            />
+            <Item
+              onSelect={() => go("settings")}
+              icon={<Settings size={14} />}
+              label="Innstillinger"
+            />
           </Command.Group>
 
           <Command.Group
             heading="Handlinger"
             className="text-xs font-medium uppercase tracking-wider text-[var(--color-fg-muted)] mb-1 mt-4 px-2"
           >
-            <Item onSelect={() => go("builder")}  icon={<Plus size={14} />}  label="Nytt dokument…" shortcut="⌘N" />
-            <Item onSelect={() => go("builder")}  icon={<Wand2 size={14} />} label="Lag program fra plan…" shortcut="⌘G" />
-            <Item onSelect={() => go("splitter")} icon={<Scissors size={14} />} label="Klipp sangbok…" />
+            <Item
+              onSelect={() => go("builder")}
+              icon={<Plus size={14} />}
+              label="Nytt dokument…"
+              shortcut="⌘N"
+            />
+            <Item
+              onSelect={() => go("builder")}
+              icon={<Wand2 size={14} />}
+              label="Lag program fra plan…"
+              shortcut="⌘G"
+            />
+            <Item
+              onSelect={() => go("splitter")}
+              icon={<Scissors size={14} />}
+              label="Klipp sangbok…"
+            />
           </Command.Group>
         </Command.List>
       </div>
