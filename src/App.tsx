@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Sidebar, type Route } from "@/components/Sidebar";
 import { CommandPalette } from "@/components/CommandPalette";
 import { DashboardPage } from "@/features/dashboard/DashboardPage";
+import { DesignPage } from "@/features/design/DesignPage";
 
 function App() {
   const [route, setRoute] = useState<Route>("dashboard");
@@ -18,6 +19,8 @@ function App() {
       <main className="flex-1 overflow-hidden">
         {route === "dashboard" ? (
           <DashboardPage />
+        ) : route === "design" ? (
+          <DesignPage />
         ) : (
           <Placeholder route={route} />
         )}
@@ -28,9 +31,13 @@ function App() {
   );
 }
 
-function Placeholder({ route }: { route: Exclude<Route, "dashboard"> }) {
+function Placeholder({
+  route,
+}: {
+  route: Exclude<Route, "dashboard" | "design">;
+}) {
   const titles: Record<
-    Exclude<Route, "dashboard">,
+    Exclude<Route, "dashboard" | "design">,
     { title: string; phase: string }
   > = {
     library: { title: "Ressursbibliotek", phase: "Phase 2.3" },

@@ -19,6 +19,7 @@ import {
   Settings,
   Plus,
   Wand2,
+  Palette,
 } from "lucide-react";
 
 import type { Route } from "./Sidebar";
@@ -142,6 +143,19 @@ export function CommandPalette({ onNavigate }: CommandPaletteProps) {
               label="Klipp sangbok…"
             />
           </Command.Group>
+
+          {import.meta.env.DEV && (
+            <Command.Group
+              heading="Utvikler"
+              className="mt-4 mb-1 px-2 text-xs font-medium tracking-wider text-[var(--color-fg-muted)] uppercase"
+            >
+              <Item
+                onSelect={() => go("design")}
+                icon={<Palette size={14} />}
+                label="Designsystem"
+              />
+            </Command.Group>
+          )}
         </Command.List>
       </div>
     </Command.Dialog>

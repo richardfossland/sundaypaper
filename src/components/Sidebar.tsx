@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 type Route =
   | "dashboard"
@@ -20,7 +21,8 @@ type Route =
   | "editor"
   | "forms"
   | "export"
-  | "settings";
+  | "settings"
+  | "design";
 
 interface SidebarProps {
   current: Route;
@@ -81,6 +83,12 @@ export function Sidebar({ current, onNavigate, onNewDocument }: SidebarProps) {
 
       {/* Bottom */}
       <div className="space-y-2 border-t border-[var(--color-border)] p-3">
+        <div className="flex items-center justify-between px-1 pb-1">
+          <span className="text-[10px] text-[var(--color-fg-muted)] uppercase tracking-wider">
+            Tema
+          </span>
+          <ThemeToggle />
+        </div>
         <button
           type="button"
           onClick={() => onNavigate("settings")}
