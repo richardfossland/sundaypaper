@@ -82,6 +82,13 @@ pub fn run() {
             commands::setting::setting_set,
             commands::setting::setting_list,
             commands::setting::setting_delete,
+            commands::pdf::pdf_info,
+            commands::pdf::pdf_extract_text,
+            commands::pdf::pdf_render_page,
+            commands::pdf::pdf_extract_pages,
+            commands::pdf::pdf_split,
+            commands::pdf::pdf_merge,
+            commands::pdf::pdf_rotate,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

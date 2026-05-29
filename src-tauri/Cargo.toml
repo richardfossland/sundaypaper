@@ -35,13 +35,26 @@ uuid = { version = "1", features = ["v7"] }
 # Type generation for the frontend (run with `cargo test export_bindings`)
 ts-rs = { version = "11", features = ["serde-compat"] }
 
+# PDF layer (Phase 1.2), behind the `pdf` feature — see [features] below.
+# lopdf is pure Rust (split/merge/rotate/extract, fully testable). pdfium-render
+# + image cover rasterised render + text extraction and need the pdfium dynamic
+# library present at runtime.
+lopdf = { version = "0.40.0", optional = true }
+# `image_025` selects pdfium-render's image integration pinned to image 0.25,
+# matching our `image` dep so `PdfBitmap::as_image()` returns a unified type.
+pdfium-render = { version = "0.9.1", optional = true, features = ["image_025"] }
+image = { version = "0.25.10", default-features = false, features = ["png"], optional = true }
+
 [dev-dependencies]
 tempfile = "3"
 
 [features]
 default = []
-# Later phases add optional native deps behind features so the default build
-# compiles with no heavy toolchain, no network and no keys:
-#   ai  = ["dep:reqwest"]        # Anthropic client (Phase 5)
-#   pdf = ["dep:pdfium-render"]  # PDF render/extract (Phase 1.2)
-#   ocr = ["dep:leptess"]        # Tesseract OCR (Phase 3.1)
+# PDF read/render/manipulation (Phase 1.2). The default build compiles without
+# it and the engine stubs return a clear `feature_disabled` error; the pure
+# planning logic (page-range parsing, split planning, rotation) is always built
+# and unit-tested. Enable with `cargo test --features pdf`.
+pdf = ["dep:lopdf", "dep:pdfium-render", "dep:image"]
+# Later phases add more optional native deps behind features:
+#   ai  = ["dep:reqwest"]   # Anthropic client (Phase 5)
+#   ocr = ["dep:leptess"]   # Tesseract OCR (Phase 3.1)

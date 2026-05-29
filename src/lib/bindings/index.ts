@@ -16,6 +16,8 @@ export type { Song } from "./Song";
 export type { Template } from "./Template";
 export type { ImportJob } from "./ImportJob";
 export type { Setting } from "./Setting";
+export type { PdfInfo } from "./PdfInfo";
+export type { PdfPageInfo } from "./PdfPageInfo";
 
 /** Error shape returned by every Tauri command (see error.rs).
  *  Keep this union in sync with `AppError::code()` in Rust. */
@@ -27,6 +29,8 @@ export interface AppError {
     | "json"
     | "database"
     | "migration"
+    | "pdf"
+    | "feature_disabled"
     | "internal";
   message: string;
 }

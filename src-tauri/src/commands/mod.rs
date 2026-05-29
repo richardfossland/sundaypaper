@@ -9,6 +9,7 @@ pub mod asset;
 pub mod block;
 pub mod document;
 pub mod import_job;
+pub mod pdf;
 pub mod project;
 pub mod setting;
 pub mod song;

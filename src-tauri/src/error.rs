@@ -39,6 +39,16 @@ pub enum AppError {
     #[error("migration: {0}")]
     Migration(#[from] sqlx::migrate::MigrateError),
 
+    /// A PDF read / render / manipulation operation failed.
+    #[error("pdf: {0}")]
+    Pdf(String),
+
+    /// The operation needs an optional cargo feature that this build was
+    /// compiled without (e.g. `pdf`). The renderer can surface a clear
+    /// "this build can't do that" message instead of a generic failure.
+    #[error("feature '{feature}' is not enabled in this build")]
+    FeatureDisabled { feature: &'static str },
+
     /// Anything else we couldn't classify.
     #[error("internal: {0}")]
     Internal(String),
@@ -54,6 +64,8 @@ impl AppError {
             AppError::Json(_) => "json",
             AppError::Database(_) => "database",
             AppError::Migration(_) => "migration",
+            AppError::Pdf(_) => "pdf",
+            AppError::FeatureDisabled { .. } => "feature_disabled",
             AppError::Internal(_) => "internal",
         }
     }

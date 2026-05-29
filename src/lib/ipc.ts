@@ -19,6 +19,7 @@ import type {
   Block,
   Document,
   ImportJob,
+  PdfInfo,
   Project,
   Setting,
   Song,
@@ -192,6 +193,26 @@ export const setting = {
   delete: (key: string) => call<void>("setting_delete", { key }),
 };
 
+// ── PDF (Phase 1.2) ──────────────────────────────────────────────────────────
+// Needs a build with the `pdf` cargo feature; otherwise these reject with an
+// IPCError whose code is "feature_disabled".
+
+export const pdf = {
+  info: (path: string) => call<PdfInfo>("pdf_info", { path }),
+  extractText: (path: string) => call<string>("pdf_extract_text", { path }),
+  /** Returns a base64 PNG (no data-URL prefix). */
+  renderPage: (path: string, pageIndex: number, targetWidth: number) =>
+    call<string>("pdf_render_page", { path, pageIndex, targetWidth }),
+  extractPages: (path: string, pages: string, outPath: string) =>
+    call<void>("pdf_extract_pages", { path, pages, outPath }),
+  split: (path: string, chunkSize: number, outDir: string, stem: string) =>
+    call<string[]>("pdf_split", { path, chunkSize, outDir, stem }),
+  merge: (inputs: string[], outPath: string) =>
+    call<void>("pdf_merge", { inputs, outPath }),
+  rotate: (path: string, pages: string, degrees: number, outPath: string) =>
+    call<void>("pdf_rotate", { path, pages, degrees, outPath }),
+};
+
 /** Bundled namespace for ergonomic imports. */
 export const ipc = {
   app,
@@ -203,4 +224,5 @@ export const ipc = {
   template,
   importJob,
   setting,
+  pdf,
 };

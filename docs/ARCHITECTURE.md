@@ -55,9 +55,16 @@ Queries are runtime-checked (`sqlx::query` / `query_as`), so no compile-time
 
 ## PDF layer
 
-_Phase 1.2._ Rendering + text extraction via `pdfium-render`; low-level
-manipulation (split/merge/rotate/extract) via `lopdf`. Clean trait boundary so
-implementations can be swapped.
+_Phase 1.2 — landed behind the `pdf` feature (ADR-002)._ `services::pdf` has
+three layers: `plan` (pure page-range parsing, split planning, rotation
+normalisation — always compiled and unit-tested), `edit` (low-level
+manipulation — info / split / merge / rotate / extract via `lopdf`, pure Rust
+and round-trip tested with lopdf-built fixtures), and `render` (rasterised
+page → PNG + text extraction via `pdfium-render`, which needs the pdfium dynamic
+library at runtime). The default build compiles without the feature and the
+engine entry points return `feature_disabled`; the pure planning logic stays
+available either way. `render`'s pdfium paths are compile-checked only — there
+is no pdfium binary in CI, so they carry no runtime tests (the unproven mile).
 
 ## Layout engine
 

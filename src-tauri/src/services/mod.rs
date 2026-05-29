@@ -12,8 +12,11 @@
 //!   - `import_job`  backward-direction ingest job log
 //!   - `setting`     local key/value store
 //!
+//! Phase 1.2:
+//!   - `pdf`  read/render/manipulate PDFs; pure planning always on, the lopdf +
+//!     pdfium engine behind the `pdf` feature
+//!
 //! Planned modules (added in their phases):
-//!   - `pdf`    render + text extraction via pdfium-render (Phase 1.2)
 //!   - `ocr`    Tesseract pipeline for scanned songbooks (Phase 3.1)
 //!   - `layout` Typst engine: block tree → PDF (Phase 4.2)
 //!   - `ai`     hybrid local/Claude provider (Phase 5.1)
@@ -23,6 +26,7 @@ pub mod block;
 pub mod db;
 pub mod document;
 pub mod import_job;
+pub mod pdf;
 pub mod project;
 pub mod setting;
 pub mod song;
