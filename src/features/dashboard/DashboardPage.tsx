@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 
 import { ipc, IPCError } from "@/lib/ipc";
+import { ProjectsPanel } from "@/features/projects/ProjectsPanel";
 
 export function DashboardPage() {
   const infoQuery = useQuery({
@@ -21,7 +22,7 @@ export function DashboardPage() {
   });
 
   return (
-    <div className="grid h-full place-items-center p-8">
+    <div className="flex h-full justify-center overflow-auto p-8">
       <div className="w-full max-w-lg">
         <div className="mb-6 text-center">
           <div className="mb-2 text-xs font-medium uppercase tracking-widest text-[var(--color-accent)]">
@@ -62,6 +63,8 @@ export function DashboardPage() {
             </>
           )}
         </div>
+
+        <ProjectsPanel />
 
         <p className="mt-6 text-center text-xs text-[var(--color-fg-muted)]">
           Trykk{" "}

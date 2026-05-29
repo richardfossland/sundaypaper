@@ -25,13 +25,45 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["app", "dmg", "nsis"],
+    "createUpdaterArtifacts": true,
+    "category": "Productivity",
+    "shortDescription": "Document & print companion for churches",
+    "longDescription": "SundayPaper is the document and print companion of the Sunday suite — the app a church reaches for to produce any paper or PDF: service programs, song sheets, the parish magazine, large-print sheets, posters, forms, and split/OCR/merge jobs on existing PDFs. Documents are a tree of blocks bound to live church data and rendered to PDF; a persistent asset library makes next Sunday's material fast.",
+    "copyright": "© 2026 Richard Fossland",
+    "publisher": "Richard Fossland",
+    "homepage": "https://sundaypaper.app",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "hardenedRuntime": true,
+      "dmg": {
+        "appPosition": { "x": 180, "y": 170 },
+        "applicationFolderPosition": { "x": 480, "y": 170 },
+        "windowSize": { "width": 660, "height": 400 }
+      }
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU2QkNGNjY5OTczNTYyQjgKUldTNFlqV1hhZmE4NW9IV1M3UWtyUm9BOFl0VGpBekVsTTlTQUEwMW5hLzRVNmM2cmowNjlHdm4K",
+      "endpoints": [
+        "https://github.com/richardfossland/sundaypaper/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

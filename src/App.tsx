@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { Sidebar, type Route } from "@/components/Sidebar";
 import { CommandPalette } from "@/components/CommandPalette";
+import { UpdateBanner } from "@/components/UpdateBanner";
 import { DashboardPage } from "@/features/dashboard/DashboardPage";
 import { DesignPage } from "@/features/design/DesignPage";
 
@@ -27,6 +28,7 @@ function App() {
       </main>
 
       <CommandPalette onNavigate={setRoute} />
+      <UpdateBanner />
     </div>
   );
 }
