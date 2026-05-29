@@ -1,10 +1,16 @@
 //! Business logic lives here, one module per concern. Commands stay thin and
 //! delegate to these.
 //!
-//! Phase 1.1 modules:
-//!   - `db`       SQLite connection pool + migrations + `now_ms`
-//!   - `project`  reference repository (the data-layer pattern)
-//!   - `document` child repository (project → documents)
+//! Phase 1.1 modules — the data layer (`db` + one repository per entity):
+//!   - `db`          SQLite connection pool + migrations + `now_ms`
+//!   - `project`     reference repository (the data-layer pattern)
+//!   - `document`    project → documents
+//!   - `block`       document → block tree (self-referential)
+//!   - `asset`       library files + fingerprint relink
+//!   - `song`        catalog (carries `tono_work_id`)
+//!   - `template`    reusable layout templates
+//!   - `import_job`  backward-direction ingest job log
+//!   - `setting`     local key/value store
 //!
 //! Planned modules (added in their phases):
 //!   - `pdf`    render + text extraction via pdfium-render (Phase 1.2)
@@ -12,6 +18,12 @@
 //!   - `layout` Typst engine: block tree → PDF (Phase 4.2)
 //!   - `ai`     hybrid local/Claude provider (Phase 5.1)
 
+pub mod asset;
+pub mod block;
 pub mod db;
 pub mod document;
+pub mod import_job;
 pub mod project;
+pub mod setting;
+pub mod song;
+pub mod template;

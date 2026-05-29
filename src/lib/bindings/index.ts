@@ -10,6 +10,12 @@
 export type { AppInfo } from "./AppInfo";
 export type { Project } from "./Project";
 export type { Document } from "./Document";
+export type { Block } from "./Block";
+export type { Asset } from "./Asset";
+export type { Song } from "./Song";
+export type { Template } from "./Template";
+export type { ImportJob } from "./ImportJob";
+export type { Setting } from "./Setting";
 
 /** Error shape returned by every Tauri command (see error.rs).
  *  Keep this union in sync with `AppError::code()` in Rust. */

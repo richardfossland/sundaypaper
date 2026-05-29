@@ -5,5 +5,11 @@
 //! Naming convention: `entity_verb` (e.g. `app_info`, later `pdf_open`).
 
 pub mod app;
+pub mod asset;
+pub mod block;
 pub mod document;
+pub mod import_job;
 pub mod project;
+pub mod setting;
+pub mod song;
+pub mod template;

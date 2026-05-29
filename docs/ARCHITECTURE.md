@@ -44,12 +44,14 @@ fonts) is the persistent core that makes next Sunday's material fast.
 _Phase 1.1 — landed._ Schema in `sql/0001_init.sql`. Entities: `project`,
 `document`, `block`, `template`, `asset`, `song` (with nullable `tono_work_id`
 from day one), `import_job`, `setting`. UUIDv7 TEXT ids, i64 unix-ms timestamps,
-FKs enforced on every connection. `project` and `document` have full
-repositories (`services::project` / `services::document`) — create / get / list
-/ update / soft-delete, covered by unit tests against an in-memory db; the
-remaining entities have tables and follow the same repo pattern as later phases
-need them. Queries are runtime-checked (`sqlx::query` / `query_as`), so no
-compile-time `DATABASE_URL` is required (see ADR-003).
+FKs enforced on every connection. Every entity has a repository in
+`services::*` — `project`, `document`, `block`, `asset`, `song`, `template`,
+`import_job`, `setting` — each create / get / list / update plus the right
+delete (soft-delete for library content; hard-delete with cascade for `block`
+subtrees; `setting` is a plain kv upsert; `import_job` is an append-only job log
+with `update_status`). All are covered by unit tests against an in-memory db.
+Queries are runtime-checked (`sqlx::query` / `query_as`), so no compile-time
+`DATABASE_URL` is required (see ADR-003).
 
 ## PDF layer
 

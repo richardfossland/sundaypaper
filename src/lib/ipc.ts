@@ -12,7 +12,18 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-import type { AppError, AppInfo, Document, Project } from "./bindings";
+import type {
+  AppError,
+  AppInfo,
+  Asset,
+  Block,
+  Document,
+  ImportJob,
+  Project,
+  Setting,
+  Song,
+  Template,
+} from "./bindings";
 
 const DEV = import.meta.env.DEV;
 const LOG_IPC = DEV && import.meta.env.VITE_IPC_LOG !== "false";
@@ -87,5 +98,109 @@ export const document = {
   delete: (id: string) => call<void>("document_delete", { id }),
 };
 
+// ── Blocks ───────────────────────────────────────────────────────────────────
+
+export const block = {
+  create: (
+    documentId: string,
+    parentId: string | null,
+    kind: string,
+    data?: string,
+  ) => call<Block>("block_create", { documentId, parentId, kind, data }),
+  get: (id: string) => call<Block>("block_get", { id }),
+  list: (documentId: string) => call<Block[]>("block_list", { documentId }),
+  update: (id: string, kind: string, data: string) =>
+    call<Block>("block_update", { id, kind, data }),
+  delete: (id: string) => call<void>("block_delete", { id }),
+};
+
+// ── Assets ───────────────────────────────────────────────────────────────────
+
+export const asset = {
+  create: (input: {
+    kind: string;
+    name: string;
+    path: string;
+    mime?: string;
+    byteSize?: number;
+    fingerprint?: string;
+  }) => call<Asset>("asset_create", input),
+  get: (id: string) => call<Asset>("asset_get", { id }),
+  list: () => call<Asset[]>("asset_list"),
+  findByFingerprint: (fingerprint: string) =>
+    call<Asset | null>("asset_find_by_fingerprint", { fingerprint }),
+  relink: (id: string, path: string) =>
+    call<Asset>("asset_relink", { id, path }),
+  delete: (id: string) => call<void>("asset_delete", { id }),
+};
+
+// ── Songs ────────────────────────────────────────────────────────────────────
+
+export const song = {
+  create: (input: {
+    title: string;
+    author?: string;
+    body?: string;
+    language?: string;
+    tonoWorkId?: string;
+  }) => call<Song>("song_create", input),
+  get: (id: string) => call<Song>("song_get", { id }),
+  list: () => call<Song[]>("song_list"),
+  update: (
+    id: string,
+    input: {
+      title: string;
+      author?: string;
+      body?: string;
+      language?: string;
+      tonoWorkId?: string;
+    },
+  ) => call<Song>("song_update", { id, ...input }),
+  delete: (id: string) => call<void>("song_delete", { id }),
+};
+
+// ── Templates ────────────────────────────────────────────────────────────────
+
+export const template = {
+  create: (name: string, kind: string, source?: string) =>
+    call<Template>("template_create", { name, kind, source }),
+  get: (id: string) => call<Template>("template_get", { id }),
+  list: () => call<Template[]>("template_list"),
+  update: (id: string, name: string, kind: string, source: string) =>
+    call<Template>("template_update", { id, name, kind, source }),
+  delete: (id: string) => call<void>("template_delete", { id }),
+};
+
+// ── Import jobs ──────────────────────────────────────────────────────────────
+
+export const importJob = {
+  create: (sourcePath: string, kind: string, projectId?: string) =>
+    call<ImportJob>("import_job_create", { projectId, sourcePath, kind }),
+  get: (id: string) => call<ImportJob>("import_job_get", { id }),
+  list: () => call<ImportJob[]>("import_job_list"),
+  updateStatus: (id: string, status: string, detail?: string) =>
+    call<ImportJob>("import_job_update_status", { id, status, detail }),
+};
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+
+export const setting = {
+  get: (key: string) => call<string | null>("setting_get", { key }),
+  set: (key: string, value: string) =>
+    call<Setting>("setting_set", { key, value }),
+  list: () => call<Setting[]>("setting_list"),
+  delete: (key: string) => call<void>("setting_delete", { key }),
+};
+
 /** Bundled namespace for ergonomic imports. */
-export const ipc = { app, project, document };
+export const ipc = {
+  app,
+  project,
+  document,
+  block,
+  asset,
+  song,
+  template,
+  importJob,
+  setting,
+};
