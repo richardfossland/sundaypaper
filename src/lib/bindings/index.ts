@@ -8,10 +8,19 @@
  */
 
 export type { AppInfo } from "./AppInfo";
+export type { Project } from "./Project";
+export type { Document } from "./Document";
 
 /** Error shape returned by every Tauri command (see error.rs).
  *  Keep this union in sync with `AppError::code()` in Rust. */
 export interface AppError {
-  code: "not_found" | "validation" | "io" | "json" | "internal";
+  code:
+    | "not_found"
+    | "validation"
+    | "io"
+    | "json"
+    | "database"
+    | "migration"
+    | "internal";
   message: string;
 }

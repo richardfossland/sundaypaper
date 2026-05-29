@@ -12,7 +12,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-import type { AppError, AppInfo } from "./bindings";
+import type { AppError, AppInfo, Document, Project } from "./bindings";
 
 const DEV = import.meta.env.DEV;
 const LOG_IPC = DEV && import.meta.env.VITE_IPC_LOG !== "false";
@@ -58,5 +58,34 @@ export const app = {
   info: () => call<AppInfo>("app_info"),
 };
 
+// ── Projects ─────────────────────────────────────────────────────────────────
+
+export const project = {
+  create: (name: string, description?: string) =>
+    call<Project>("project_create", { name, description }),
+  get: (id: string) => call<Project>("project_get", { id }),
+  list: () => call<Project[]>("project_list"),
+  update: (id: string, name: string, description?: string) =>
+    call<Project>("project_update", { id, name, description }),
+  delete: (id: string) => call<void>("project_delete", { id }),
+};
+
+// ── Documents ────────────────────────────────────────────────────────────────
+
+export const document = {
+  create: (projectId: string, title: string, kind: string, pageSize?: string) =>
+    call<Document>("document_create", {
+      projectId,
+      title,
+      kind,
+      pageSize,
+    }),
+  get: (id: string) => call<Document>("document_get", { id }),
+  list: (projectId: string) => call<Document[]>("document_list", { projectId }),
+  update: (id: string, title: string, kind: string, pageSize: string) =>
+    call<Document>("document_update", { id, title, kind, pageSize }),
+  delete: (id: string) => call<void>("document_delete", { id }),
+};
+
 /** Bundled namespace for ergonomic imports. */
-export const ipc = { app };
+export const ipc = { app, project, document };

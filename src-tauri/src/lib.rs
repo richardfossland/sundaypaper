@@ -1,15 +1,24 @@
 //! SundayPaper main library — Tauri runtime entry point.
 //!
-//! Phase 0 wires up only the bare bridge: tracing, the opener plugin, and the
-//! `app_info` IPC command that the dashboard calls to prove Rust ↔ React works.
-//!
-//! Later phases add `AppState` (SQLite pool via sqlx, app-local data dir) in
-//! the `setup` callback and register the real domain commands here. Command
+//! Phase 1 wires the data layer: the `setup` callback opens the SQLite store in
+//! the app-local data dir (running migrations from `sql/`) and stores it in
+//! `AppState` so commands can reach it via `tauri::State`. Command
 //! implementations live in `commands::*` — this file only registers them.
+//!
+//! Later phases add domain services (pdf, ocr, layout, ai) and their commands.
 
 pub mod commands;
 pub mod error;
 pub mod services;
+
+use tauri::Manager;
+
+use services::db::Db;
+
+/// Shared application state, managed by Tauri and injected into commands.
+pub struct AppState {
+    pub db: Db,
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -22,11 +31,29 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .setup(|_app| {
-            tracing::info!("SundayPaper backend ready");
+        .setup(|app| {
+            // Open (and migrate) the local store before the UI can issue IPC.
+            let dir = app.path().app_data_dir()?;
+            std::fs::create_dir_all(&dir)?;
+            let db_path = dir.join("sundaypaper.db");
+            let db = tauri::async_runtime::block_on(Db::connect_file(&db_path))?;
+            app.manage(AppState { db });
+            tracing::info!(path = %db_path.display(), "SundayPaper backend ready");
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![commands::app::app_info])
+        .invoke_handler(tauri::generate_handler![
+            commands::app::app_info,
+            commands::project::project_create,
+            commands::project::project_get,
+            commands::project::project_list,
+            commands::project::project_update,
+            commands::project::project_delete,
+            commands::document::document_create,
+            commands::document::document_get,
+            commands::document::document_list,
+            commands::document::document_update,
+            commands::document::document_delete,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

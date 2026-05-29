@@ -41,9 +41,15 @@ fonts) is the persistent core that makes next Sunday's material fast.
 
 ## Data model
 
-_Phase 1.1._ Entities: `project`, `document`, `block`, `template`, `asset`,
-`song` (with nullable `tono_work_id` from day one), `import_job`, `setting`.
-UUIDv7 TEXT ids, i64 unix-ms timestamps, FKs ON.
+_Phase 1.1 — landed._ Schema in `sql/0001_init.sql`. Entities: `project`,
+`document`, `block`, `template`, `asset`, `song` (with nullable `tono_work_id`
+from day one), `import_job`, `setting`. UUIDv7 TEXT ids, i64 unix-ms timestamps,
+FKs enforced on every connection. `project` and `document` have full
+repositories (`services::project` / `services::document`) — create / get / list
+/ update / soft-delete, covered by unit tests against an in-memory db; the
+remaining entities have tables and follow the same repo pattern as later phases
+need them. Queries are runtime-checked (`sqlx::query` / `query_as`), so no
+compile-time `DATABASE_URL` is required (see ADR-003).
 
 ## PDF layer
 

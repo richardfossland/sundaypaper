@@ -17,6 +17,24 @@ Lightweight ADRs. Newest first. Copy the template for each new decision.
 
 ---
 
+## ADR-003 — Runtime-checked sqlx queries; migrations in `sql/`
+
+- **Date:** 2026-05-29
+- **Status:** accepted
+- **Context:** sqlx can verify SQL at compile time, but that needs a live
+  `DATABASE_URL` or a committed `.sqlx` offline cache — extra ceremony that
+  breaks fresh checkouts and CI without a database. SundayPaper is local-first
+  with a schema small enough to verify another way.
+- **Decision:** Use runtime-checked queries (`sqlx::query` / `query_as` with
+  `#[derive(FromRow)]`), not the compile-time `query!` macros. The schema is the
+  versioned migrations in `sql/`, embedded via `sqlx::migrate!` and applied on
+  connect; correctness is guarded by repo unit tests that run every migration
+  against an in-memory SQLite db. Foreign keys are turned on per connection.
+- **Consequences:** Builds and CI need no database or `DATABASE_URL`; fresh
+  clones just work. The trade-off is that a typo in SQL surfaces in tests rather
+  than at compile time — acceptable given each repo ships with tests. IDs are
+  UUIDv7 TEXT; timestamps are i64 unix-ms (`services::db::now_ms`).
+
 ## ADR-002 — Optional cargo features for heavy/native deps
 
 - **Date:** 2026-05-28
