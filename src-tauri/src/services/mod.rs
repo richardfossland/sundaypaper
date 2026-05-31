@@ -16,6 +16,9 @@
 //!   - `pdf`  read/render/manipulate PDFs; pure planning always on, the lopdf +
 //!     pdfium engine behind the `pdf` feature
 //!
+//! Bridges (pure, always-on):
+//!   - `bulletin`  ServicePlan (from SundayPlan) → program block specs
+//!
 //! Planned modules (added in their phases):
 //!   - `ocr`    Tesseract pipeline for scanned songbooks (Phase 3.1)
 //!   - `layout` Typst engine: block tree → PDF (Phase 4.2)
@@ -23,6 +26,7 @@
 
 pub mod asset;
 pub mod block;
+pub mod bulletin;
 pub mod db;
 pub mod document;
 pub mod import_job;

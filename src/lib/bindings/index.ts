@@ -19,6 +19,14 @@ export type { Setting } from "./Setting";
 export type { PdfInfo } from "./PdfInfo";
 export type { PdfPageInfo } from "./PdfPageInfo";
 
+// ServicePlan → program bridge (services/bulletin.rs).
+export type { ServicePlan } from "./ServicePlan";
+export type { SetlistItem } from "./SetlistItem";
+export type { SetlistItemKind } from "./SetlistItemKind";
+export type { SongRef } from "./SongRef";
+export type { ScriptureRef } from "./ScriptureRef";
+export type { BlockSpec } from "./BlockSpec";
+
 /** Error shape returned by every Tauri command (see error.rs).
  *  Keep this union in sync with `AppError::code()` in Rust. */
 export interface AppError {
