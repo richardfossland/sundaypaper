@@ -30,6 +30,7 @@ pub mod bulletin;
 pub mod db;
 pub mod document;
 pub mod import_job;
+pub mod layout;
 pub mod pdf;
 pub mod project;
 pub mod setting;
