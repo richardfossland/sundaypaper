@@ -7,6 +7,7 @@
 pub mod app;
 pub mod asset;
 pub mod block;
+pub mod bulletin;
 pub mod document;
 pub mod import_job;
 pub mod pdf;

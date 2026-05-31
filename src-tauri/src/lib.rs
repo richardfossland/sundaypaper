@@ -68,6 +68,7 @@ pub fn run() {
             commands::block::block_list,
             commands::block::block_update,
             commands::block::block_delete,
+            commands::bulletin::bulletin_generate,
             commands::asset::asset_create,
             commands::asset::asset_get,
             commands::asset::asset_list,
