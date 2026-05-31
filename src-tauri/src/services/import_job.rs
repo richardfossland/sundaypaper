@@ -85,12 +85,15 @@ impl ImportJobRepo {
             })
     }
 
-    /// All jobs, newest first.
+    /// All jobs, newest first. `id DESC` is a stable tiebreaker: UUID v7 is
+    /// time-ordered, so within the same `created_at` millisecond the later id
+    /// still sorts first — making the order deterministic instead of arbitrary.
     pub async fn list(&self) -> AppResult<Vec<ImportJob>> {
-        let rows =
-            sqlx::query_as::<_, ImportJob>("SELECT * FROM import_job ORDER BY created_at DESC")
-                .fetch_all(&self.db.pool)
-                .await?;
+        let rows = sqlx::query_as::<_, ImportJob>(
+            "SELECT * FROM import_job ORDER BY created_at DESC, id DESC",
+        )
+        .fetch_all(&self.db.pool)
+        .await?;
         Ok(rows)
     }
 
@@ -164,6 +167,19 @@ mod tests {
         let repo = repo().await;
         let a = repo.create(None, "/a.pdf", "merge").await.unwrap();
         let b = repo.create(None, "/b.pdf", "merge").await.unwrap();
+        // Stamp distinct `created_at` values so the primary sort key alone
+        // decides the order — `create` uses `now_ms()` and both rows can land in
+        // the same millisecond, which is exactly the tie the query now breaks on
+        // `id DESC`. Pinning the timestamps keeps this test's intent (newest
+        // first by time) crisp and independent of that tiebreaker.
+        for (id, ts) in [(&a.id, 1_000_i64), (&b.id, 2_000_i64)] {
+            sqlx::query("UPDATE import_job SET created_at = ? WHERE id = ?")
+                .bind(ts)
+                .bind(id)
+                .execute(&repo.db.pool)
+                .await
+                .unwrap();
+        }
         let ids: Vec<_> = repo
             .list()
             .await
