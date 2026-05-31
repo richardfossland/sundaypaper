@@ -8,4 +8,4 @@
  * newer SundayPlan can add item kinds without breaking this generator — they
  * fall back to a plain text block rather than being dropped.
  */
-export type SetlistItemKind = "welcome" | "song" | "scripture" | "sermon" | "liturgy" | "prayer" | "announcement" | "offering" | "benediction" | "other";
+export type SetlistItemKind = "welcome" | "song" | "scripture" | "sermon" | "liturgy" | "creed" | "prayer" | "communion" | "music" | "announcement" | "offering" | "image" | "benediction" | "other";

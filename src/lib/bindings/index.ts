@@ -25,6 +25,7 @@ export type { SetlistItem } from "./SetlistItem";
 export type { SetlistItemKind } from "./SetlistItemKind";
 export type { SongRef } from "./SongRef";
 export type { ScriptureRef } from "./ScriptureRef";
+export type { AssetRef } from "./AssetRef";
 export type { BlockSpec } from "./BlockSpec";
 
 /** Error shape returned by every Tauri command (see error.rs).

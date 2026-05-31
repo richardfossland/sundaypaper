@@ -64,6 +64,25 @@ pub struct ScriptureRef {
     pub translation: Option<String>,
 }
 
+/// A reference to an asset / image carried from the plan so the generated block
+/// can later re-bind to the local asset library row by id, or fall back to a
+/// URL the plan supplied.
+///
+/// Mirrors `sunday-contracts`; converge once published.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq, Default)]
+#[ts(export, export_to = "../../src/lib/bindings/AssetRef.ts")]
+pub struct AssetRef {
+    /// Asset-library id, if the plan knew one.
+    #[serde(default)]
+    pub asset_id: Option<String>,
+    /// A URL / path the plan supplied (e.g. a poster the planner attached).
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Alt text / caption for the image.
+    #[serde(default)]
+    pub caption: Option<String>,
+}
+
 /// The kind of a single ordered item in a service plan.
 ///
 /// Mirrors `sunday-contracts`; converge once published. Unknown / future kinds
@@ -82,14 +101,25 @@ pub enum SetlistItemKind {
     Scripture,
     /// The sermon / message.
     Sermon,
-    /// A spoken or read liturgical element (creed, prayer, confession…).
+    /// A spoken or read liturgical element (general liturgical text).
     Liturgy,
+    /// A creed / confession of faith (Apostles', Nicene…). A liturgical element
+    /// distinct enough to print with its own role so it can be styled apart.
+    Creed,
     /// A prayer (intercession, the Lord's Prayer…).
     Prayer,
+    /// Holy Communion / the Eucharist / Lord's Supper.
+    Communion,
+    /// Instrumental music with no congregational part (prelude, postlude,
+    /// offertory voluntary) — printed as a titled note, not a song block.
+    Music,
     /// An announcement / notice.
     Announcement,
     /// The offering / collection.
     Offering,
+    /// A standalone image / poster the planner attached (e.g. a seasonal
+    /// banner). Carries an [`AssetRef`].
+    Image,
     /// The closing blessing / benediction.
     Benediction,
     /// Anything SundayPlan adds later that we don't yet model. The default so
@@ -115,12 +145,28 @@ pub struct SetlistItem {
     /// Who leads / speaks this item, printed as a byline.
     #[serde(default)]
     pub leader: Option<String>,
+    /// A clock time the plan attached (e.g. "10:30"), printed in the margin so
+    /// a printed order-of-service can double as a run sheet.
+    #[serde(default)]
+    pub time: Option<String>,
+    /// Rights line for printed song lyrics (e.g. a CCLI / copyright credit).
+    /// Carried so a song block can print the credit the licence requires — the
+    /// Nordic TONO/CCLI reality from the product principles.
+    #[serde(default)]
+    pub copyright: Option<String>,
+    /// When true the renderer should start this item on a fresh page (e.g. a
+    /// full-page hymn sheet). Defaults to false.
+    #[serde(default)]
+    pub page_break: bool,
     /// Present when `kind == Song`.
     #[serde(default)]
     pub song: Option<SongRef>,
     /// Present when `kind == Scripture`.
     #[serde(default)]
     pub scripture: Option<ScriptureRef>,
+    /// Present when `kind == Image`.
+    #[serde(default)]
+    pub asset: Option<AssetRef>,
 }
 
 /// A whole planned service: header metadata + the ordered items.
@@ -175,16 +221,24 @@ impl BlockSpec {
 ///
 /// - A leading `heading` block carries the service title, church and date
 ///   (skipped entirely if the plan has none of the three).
-/// - `welcome` / `liturgy` / `prayer` / `offering` / `benediction` →
-///   `liturgy` blocks (a labelled, optionally-bylined spoken element).
+/// - `welcome` / `liturgy` / `creed` / `prayer` / `communion` / `offering` /
+///   `benediction` → `liturgy` blocks (a labelled, optionally-bylined spoken
+///   element) each carrying a distinct `role` so the renderer can style them
+///   apart.
 /// - `song` → `song` block carrying title + the full [`SongRef`] (song_id,
-///   tono_work_id, author, number) so it can relink to the catalog.
+///   tono_work_id, author, number) plus any `copyright` credit line.
+/// - `music` → `music` block (instrumental: title + leader, no lyrics).
 /// - `scripture` → `scripture` block carrying the [`ScriptureRef`] and any
 ///   read text.
 /// - `sermon` → `heading` block (the sermon is a section header on a printed
 ///   program; the manuscript itself isn't printed).
 /// - `announcement` → `announcement` block.
+/// - `image` → `image` block carrying the [`AssetRef`] (asset id / url / caption).
 /// - `other` / unknown future kinds → a plain `text` block so nothing is lost.
+///
+/// Every block additionally carries any `time` (margin run-sheet clock) and a
+/// `pageBreak` flag the item set, so cross-cutting layout hints survive
+/// regardless of kind.
 ///
 /// Errors only if the plan has no items at all — an empty program is a user
 /// mistake worth surfacing, matching how the repos validate required input.
@@ -219,12 +273,14 @@ pub fn build_bulletin(plan: &ServicePlan) -> AppResult<Vec<BlockSpec>> {
 }
 
 /// Map a single item to its block. Each branch picks the most faithful block
-/// kind and carries the item's title / leader / refs through.
+/// kind and carries the item's title / leader / refs through; the cross-cutting
+/// `time` and `pageBreak` hints are then merged onto every block so they
+/// survive no matter the kind.
 fn block_for_item(item: &SetlistItem) -> AppResult<BlockSpec> {
-    match item.kind {
+    let (kind, mut data) = match item.kind {
         SetlistItemKind::Song => {
             let song = item.song.clone().unwrap_or_default();
-            BlockSpec::new(
+            (
                 "song",
                 serde_json::json!({
                     "title": opt(&item.title),
@@ -233,12 +289,22 @@ fn block_for_item(item: &SetlistItem) -> AppResult<BlockSpec> {
                     "tonoWorkId": opt(&song.tono_work_id),
                     "author": opt(&song.author),
                     "number": opt(&song.number),
+                    // Rights credit the licence may require us to print.
+                    "copyright": opt(&item.copyright),
                 }),
             )
         }
+        SetlistItemKind::Music => (
+            "music",
+            serde_json::json!({
+                "title": opt(&item.title),
+                "leader": opt(&item.leader),
+                "text": opt(&item.body),
+            }),
+        ),
         SetlistItemKind::Scripture => {
             let s = item.scripture.clone().unwrap_or_default();
-            BlockSpec::new(
+            (
                 "scripture",
                 serde_json::json!({
                     "title": opt(&item.title),
@@ -250,7 +316,7 @@ fn block_for_item(item: &SetlistItem) -> AppResult<BlockSpec> {
                 }),
             )
         }
-        SetlistItemKind::Sermon => BlockSpec::new(
+        SetlistItemKind::Sermon => (
             "heading",
             serde_json::json!({
                 "role": "sermon",
@@ -259,18 +325,32 @@ fn block_for_item(item: &SetlistItem) -> AppResult<BlockSpec> {
                 "synopsis": opt(&item.body),
             }),
         ),
-        SetlistItemKind::Announcement => BlockSpec::new(
+        SetlistItemKind::Announcement => (
             "announcement",
             serde_json::json!({
                 "title": opt(&item.title),
                 "text": opt(&item.body),
             }),
         ),
+        SetlistItemKind::Image => {
+            let a = item.asset.clone().unwrap_or_default();
+            (
+                "image",
+                serde_json::json!({
+                    "title": opt(&item.title),
+                    "assetId": opt(&a.asset_id),
+                    "url": opt(&a.url),
+                    "caption": opt(&a.caption).or_else(|| opt(&item.body)),
+                }),
+            )
+        }
         SetlistItemKind::Welcome
         | SetlistItemKind::Liturgy
+        | SetlistItemKind::Creed
         | SetlistItemKind::Prayer
+        | SetlistItemKind::Communion
         | SetlistItemKind::Offering
-        | SetlistItemKind::Benediction => BlockSpec::new(
+        | SetlistItemKind::Benediction => (
             "liturgy",
             serde_json::json!({
                 "role": liturgy_role(item.kind),
@@ -279,14 +359,31 @@ fn block_for_item(item: &SetlistItem) -> AppResult<BlockSpec> {
                 "text": opt(&item.body),
             }),
         ),
-        SetlistItemKind::Other => BlockSpec::new(
+        SetlistItemKind::Other => (
             "text",
             serde_json::json!({
                 "title": opt(&item.title),
                 "text": opt(&item.body),
             }),
         ),
+    };
+
+    merge_hints(&mut data, item);
+    BlockSpec::new(kind, data)
+}
+
+/// Attach the cross-cutting layout hints — the run-sheet `time` and the
+/// `pageBreak` flag — onto a block's payload. `time` is only set when present
+/// so blocks without a clock stay free of a null key; `pageBreak` is always
+/// written (a plain bool) so the renderer never has to treat "absent" specially.
+fn merge_hints(data: &mut serde_json::Value, item: &SetlistItem) {
+    let obj = data
+        .as_object_mut()
+        .expect("block payloads are always JSON objects");
+    if let Some(time) = opt(&item.time) {
+        obj.insert("time".into(), serde_json::Value::String(time));
     }
+    obj.insert("pageBreak".into(), serde_json::Value::Bool(item.page_break));
 }
 
 /// The `role` tag a liturgy block carries so the renderer / later styling can
@@ -294,7 +391,9 @@ fn block_for_item(item: &SetlistItem) -> AppResult<BlockSpec> {
 fn liturgy_role(kind: SetlistItemKind) -> &'static str {
     match kind {
         SetlistItemKind::Welcome => "welcome",
+        SetlistItemKind::Creed => "creed",
         SetlistItemKind::Prayer => "prayer",
+        SetlistItemKind::Communion => "communion",
         SetlistItemKind::Offering => "offering",
         SetlistItemKind::Benediction => "benediction",
         // Plain liturgy and anything routed here without its own role.
@@ -306,7 +405,9 @@ fn liturgy_role(kind: SetlistItemKind) -> &'static str {
 fn default_label(kind: SetlistItemKind) -> &'static str {
     match kind {
         SetlistItemKind::Welcome => "Welcome",
+        SetlistItemKind::Creed => "Creed",
         SetlistItemKind::Prayer => "Prayer",
+        SetlistItemKind::Communion => "Holy Communion",
         SetlistItemKind::Offering => "Offering",
         SetlistItemKind::Benediction => "Benediction",
         _ => "Liturgy",
@@ -376,7 +477,7 @@ mod tests {
                     ..Default::default()
                 },
                 SetlistItem {
-                    kind: SetlistItemKind::Liturgy,
+                    kind: SetlistItemKind::Creed,
                     title: Some("Apostles' Creed".into()),
                     body: Some("I believe in God…".into()),
                     ..Default::default()
@@ -384,6 +485,10 @@ mod tests {
                 SetlistItem {
                     kind: SetlistItemKind::Prayer,
                     title: Some("Prayers of the People".into()),
+                    ..Default::default()
+                },
+                SetlistItem {
+                    kind: SetlistItemKind::Communion,
                     ..Default::default()
                 },
                 SetlistItem {
@@ -397,14 +502,31 @@ mod tests {
                     ..Default::default()
                 },
                 SetlistItem {
+                    kind: SetlistItemKind::Image,
+                    title: Some("Easter banner".into()),
+                    asset: Some(AssetRef {
+                        asset_id: Some("asset-7".into()),
+                        url: Some("https://x/banner.png".into()),
+                        caption: Some("He is risen".into()),
+                    }),
+                    ..Default::default()
+                },
+                SetlistItem {
                     kind: SetlistItemKind::Benediction,
                     leader: Some("Pastor Anne".into()),
                     ..Default::default()
                 },
                 SetlistItem {
-                    kind: SetlistItemKind::Other,
+                    kind: SetlistItemKind::Music,
                     title: Some("Postlude".into()),
                     body: Some("Organ voluntary".into()),
+                    leader: Some("Organist".into()),
+                    ..Default::default()
+                },
+                SetlistItem {
+                    kind: SetlistItemKind::Other,
+                    title: Some("Notices".into()),
+                    body: Some("misc".into()),
                     ..Default::default()
                 },
             ],
@@ -460,11 +582,14 @@ mod tests {
                 "song",         // song
                 "scripture",    // scripture
                 "heading",      // sermon
-                "liturgy",      // liturgy (creed)
+                "liturgy",      // creed
                 "liturgy",      // prayer
+                "liturgy",      // communion
                 "announcement", // announcement
                 "liturgy",      // offering
+                "image",        // image
                 "liturgy",      // benediction
+                "music",        // music
                 "text",         // other
             ]
         );
@@ -564,7 +689,14 @@ mod tests {
             .collect();
         assert_eq!(
             roles,
-            vec!["welcome", "liturgy", "prayer", "offering", "benediction"]
+            vec![
+                "welcome",
+                "creed",
+                "prayer",
+                "communion",
+                "offering",
+                "benediction"
+            ]
         );
     }
 
@@ -594,8 +726,148 @@ mod tests {
         let last = specs.last().unwrap();
         assert_eq!(last.kind, "text");
         let d = data(last);
+        assert_eq!(d["title"], "Notices");
+        assert_eq!(d["text"], "misc");
+    }
+
+    #[test]
+    fn music_becomes_music_block_not_song() {
+        let plan = representative_plan();
+        let specs = build_bulletin(&plan).unwrap();
+        let music = specs.iter().find(|s| s.kind == "music").unwrap();
+        // Instrumental → no songId/tonoWorkId keys, but title + leader + note.
+        let d = data(music);
         assert_eq!(d["title"], "Postlude");
+        assert_eq!(d["leader"], "Organist");
         assert_eq!(d["text"], "Organ voluntary");
+        assert!(d.get("songId").is_none(), "music is not a song block");
+    }
+
+    #[test]
+    fn image_block_carries_asset_ref() {
+        let plan = representative_plan();
+        let specs = build_bulletin(&plan).unwrap();
+        let img = specs.iter().find(|s| s.kind == "image").unwrap();
+        let d = data(img);
+        assert_eq!(d["title"], "Easter banner");
+        assert_eq!(d["assetId"], "asset-7");
+        assert_eq!(d["url"], "https://x/banner.png");
+        assert_eq!(d["caption"], "He is risen");
+    }
+
+    #[test]
+    fn image_caption_falls_back_to_body() {
+        // No explicit caption on the asset → the item body becomes the caption.
+        let plan = ServicePlan {
+            items: vec![SetlistItem {
+                kind: SetlistItemKind::Image,
+                body: Some("A photo from last week".into()),
+                asset: Some(AssetRef {
+                    url: Some("u".into()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let specs = build_bulletin(&plan).unwrap();
+        assert_eq!(specs[0].kind, "image");
+        assert_eq!(data(&specs[0])["caption"], "A photo from last week");
+    }
+
+    #[test]
+    fn communion_and_creed_get_default_labels_and_roles() {
+        let plan = ServicePlan {
+            items: vec![
+                SetlistItem {
+                    kind: SetlistItemKind::Communion,
+                    ..Default::default()
+                },
+                SetlistItem {
+                    kind: SetlistItemKind::Creed,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let specs = build_bulletin(&plan).unwrap();
+        assert_eq!(data(&specs[0])["role"], "communion");
+        assert_eq!(data(&specs[0])["title"], "Holy Communion");
+        assert_eq!(data(&specs[1])["role"], "creed");
+        assert_eq!(data(&specs[1])["title"], "Creed");
+    }
+
+    #[test]
+    fn song_block_carries_copyright_credit() {
+        let plan = ServicePlan {
+            items: vec![SetlistItem {
+                kind: SetlistItemKind::Song,
+                title: Some("Amazing Grace".into()),
+                copyright: Some("Public Domain / arr. © 2020 X (CCLI 123)".into()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let specs = build_bulletin(&plan).unwrap();
+        assert_eq!(
+            data(&specs[0])["copyright"],
+            "Public Domain / arr. © 2020 X (CCLI 123)"
+        );
+    }
+
+    #[test]
+    fn time_hint_is_present_only_when_set_and_page_break_always() {
+        let plan = ServicePlan {
+            items: vec![
+                SetlistItem {
+                    kind: SetlistItemKind::Welcome,
+                    time: Some(" 10:30 ".into()),
+                    page_break: true,
+                    ..Default::default()
+                },
+                SetlistItem {
+                    kind: SetlistItemKind::Prayer,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let specs = build_bulletin(&plan).unwrap();
+        let first = data(&specs[0]);
+        assert_eq!(first["time"], "10:30", "time is trimmed");
+        assert_eq!(first["pageBreak"], true);
+        let second = data(&specs[1]);
+        assert!(
+            second.get("time").is_none(),
+            "no time key when the item had none"
+        );
+        assert_eq!(
+            second["pageBreak"], false,
+            "pageBreak is always written, defaulting to false"
+        );
+    }
+
+    #[test]
+    fn hints_merge_onto_every_kind_including_song_and_image() {
+        // The hint merge must not clobber kind-specific payload.
+        let plan = ServicePlan {
+            items: vec![SetlistItem {
+                kind: SetlistItemKind::Song,
+                title: Some("Hymn".into()),
+                time: Some("09:00".into()),
+                page_break: true,
+                song: Some(SongRef {
+                    number: Some("N1".into()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let d = data(&build_bulletin(&plan).unwrap()[0]);
+        assert_eq!(d["number"], "N1", "kind payload survives the hint merge");
+        assert_eq!(d["time"], "09:00");
+        assert_eq!(d["pageBreak"], true);
     }
 
     #[test]
