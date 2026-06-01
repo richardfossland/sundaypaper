@@ -16,6 +16,8 @@ import type {
   AppError,
   AppInfo,
   Asset,
+  AssetKind,
+  AssetLibEntry,
   Block,
   Document,
   ImportJob,
@@ -213,6 +215,43 @@ export const pdf = {
     call<void>("pdf_rotate", { path, pages, degrees, outPath }),
 };
 
+// ── Asset Library (Phase 1.3) ────────────────────────────────────────────────
+// Typed asset library with AssetKind enum + tags support. Complements the base
+// `asset` namespace; the frontend can use whichever fits the context.
+
+export const assetLib = {
+  /** Register a file in the typed asset library. */
+  add: (input: {
+    name: string;
+    kind: AssetKind;
+    filePath: string;
+    tags?: string;
+  }) =>
+    call<AssetLibEntry>("asset_add", {
+      name: input.name,
+      kind: input.kind,
+      filePath: input.filePath,
+      tags: input.tags,
+    }),
+
+  /** List live assets, optionally filtered by kind. */
+  list: (kind?: AssetKind) => call<AssetLibEntry[]>("asset_list_lib", { kind }),
+
+  /** Soft-delete an asset from the library. */
+  delete: (id: string) => call<void>("asset_delete_lib", { id }),
+
+  /** Open the asset's backing file in the system default application. */
+  open: (id: string) => call<void>("asset_open", { id }),
+};
+
+// ── PDF ops (Phase 1.3) ──────────────────────────────────────────────────────
+// Focused helpers for the backward-direction ingest UI.
+
+export const pdfOps = {
+  /** Return the number of pages in a PDF file. */
+  pageCount: (path: string) => call<number>("pdf_page_count", { path }),
+};
+
 /** Bundled namespace for ergonomic imports. */
 export const ipc = {
   app,
@@ -220,9 +259,11 @@ export const ipc = {
   document,
   block,
   asset,
+  assetLib,
   song,
   template,
   importJob,
   setting,
   pdf,
+  pdfOps,
 };

@@ -6,11 +6,13 @@
 
 pub mod app;
 pub mod asset;
+pub mod asset_lib;
 pub mod block;
 pub mod bulletin;
 pub mod document;
 pub mod import_job;
 pub mod pdf;
+pub mod pdf_ops;
 pub mod project;
 pub mod setting;
 pub mod song;

@@ -100,6 +100,11 @@ pub fn run() {
             commands::pdf::pdf_split,
             commands::pdf::pdf_merge,
             commands::pdf::pdf_rotate,
+            commands::pdf_ops::pdf_page_count,
+            commands::asset_lib::asset_add,
+            commands::asset_lib::asset_list_lib,
+            commands::asset_lib::asset_delete_lib,
+            commands::asset_lib::asset_open,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

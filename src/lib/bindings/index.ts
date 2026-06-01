@@ -12,6 +12,8 @@ export type { Project } from "./Project";
 export type { Document } from "./Document";
 export type { Block } from "./Block";
 export type { Asset } from "./Asset";
+export type { AssetKind } from "./AssetKind";
+export type { AssetLibEntry } from "./AssetLibEntry";
 export type { Song } from "./Song";
 export type { Template } from "./Template";
 export type { ImportJob } from "./ImportJob";

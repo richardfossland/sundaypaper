@@ -5,6 +5,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { DashboardPage } from "@/features/dashboard/DashboardPage";
 import { DesignPage } from "@/features/design/DesignPage";
+import { AssetsPanel } from "@/features/assets/AssetsPanel";
 
 function App() {
   const [route, setRoute] = useState<Route>("dashboard");
@@ -22,6 +23,8 @@ function App() {
           <DashboardPage />
         ) : route === "design" ? (
           <DesignPage />
+        ) : route === "library" ? (
+          <AssetsPanel />
         ) : (
           <Placeholder route={route} />
         )}
