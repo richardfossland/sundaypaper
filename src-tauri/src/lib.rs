@@ -105,6 +105,17 @@ pub fn run() {
             commands::asset_lib::asset_list_lib,
             commands::asset_lib::asset_delete_lib,
             commands::asset_lib::asset_open,
+            commands::doc_template::doc_template_create,
+            commands::doc_template::doc_template_get,
+            commands::doc_template::doc_template_list,
+            commands::doc_template::doc_template_update,
+            commands::doc_template::doc_template_delete,
+            commands::doc_template::doc_template_render,
+            commands::doc_template::doc_template_seed_builtins,
+            commands::sangbok::sangbok_import,
+            commands::sangbok::sangbok_list_jobs,
+            commands::sangbok::sangbok_get_job,
+            commands::sangbok::sangbok_cancel,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

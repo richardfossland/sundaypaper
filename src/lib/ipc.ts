@@ -19,13 +19,16 @@ import type {
   AssetKind,
   AssetLibEntry,
   Block,
+  DocTemplate,
   Document,
   ImportJob,
   PdfInfo,
   Project,
+  SangbokJob,
   Setting,
   Song,
   Template,
+  TemplateVar,
 } from "./bindings";
 
 const DEV = import.meta.env.DEV;
@@ -252,6 +255,51 @@ export const pdfOps = {
   pageCount: (path: string) => call<number>("pdf_page_count", { path }),
 };
 
+// ── Document templates (Phase doc-templates) ─────────────────────────────────
+
+export interface TemplateVarInput {
+  name: string;
+  label: string;
+  kind: string;
+  defaultValue?: string;
+  required: boolean;
+}
+
+export const docTemplate = {
+  create: (
+    name: string,
+    kind: string,
+    typstSource?: string,
+    variables?: TemplateVarInput[],
+  ) =>
+    call<DocTemplate>("doc_template_create", {
+      name,
+      kind,
+      typstSource,
+      variables,
+    }),
+  get: (id: string) => call<DocTemplate>("doc_template_get", { id }),
+  list: (kind?: string) => call<DocTemplate[]>("doc_template_list", { kind }),
+  update: (id: string, name: string, kind: string, typstSource: string) =>
+    call<DocTemplate>("doc_template_update", { id, name, kind, typstSource }),
+  delete: (id: string) => call<void>("doc_template_delete", { id }),
+  /** Render a template by substituting {{VAR}} placeholders. Returns Typst source. */
+  render: (id: string, vars: Record<string, string>) =>
+    call<string>("doc_template_render", { id, vars }),
+  /** Seed the three built-in templates. Idempotent. */
+  seedBuiltins: () => call<void>("doc_template_seed_builtins"),
+};
+
+// ── Sangbok-klipper (Phase 3.1 OCR prep) ─────────────────────────────────────
+
+export const sangbok = {
+  /** Queue and process (stub) an OCR job for the given PDF path. */
+  import: (pdfPath: string) => call<SangbokJob>("sangbok_import", { pdfPath }),
+  listJobs: () => call<SangbokJob[]>("sangbok_list_jobs"),
+  getJob: (id: string) => call<SangbokJob>("sangbok_get_job", { id }),
+  cancel: (id: string) => call<SangbokJob>("sangbok_cancel", { id }),
+};
+
 /** Bundled namespace for ergonomic imports. */
 export const ipc = {
   app,
@@ -262,8 +310,13 @@ export const ipc = {
   assetLib,
   song,
   template,
+  docTemplate,
   importJob,
   setting,
   pdf,
   pdfOps,
+  sangbok,
 };
+
+// Re-export TemplateVar so panels can import from here.
+export type { TemplateVar };

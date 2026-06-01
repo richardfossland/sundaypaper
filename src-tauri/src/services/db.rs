@@ -81,6 +81,10 @@ mod tests {
             "block",
             "import_job",
             "setting",
+            "doc_template",
+            "template_var",
+            "sangbok_job",
+            "song_extract",
         ] {
             let found: Option<String> =
                 sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type='table' AND name=?")

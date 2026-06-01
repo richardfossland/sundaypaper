@@ -21,6 +21,17 @@ export type { Setting } from "./Setting";
 export type { PdfInfo } from "./PdfInfo";
 export type { PdfPageInfo } from "./PdfPageInfo";
 
+// Document template system (Phase doc-templates).
+export type { DocTemplate } from "./DocTemplate";
+export type { DocTemplateKind } from "./DocTemplateKind";
+export type { TemplateVar } from "./TemplateVar";
+export type { TemplateVarKind } from "./TemplateVarKind";
+
+// Sangbok-klipper pipeline (Phase 3.1 OCR prep).
+export type { SangbokJob } from "./SangbokJob";
+export type { SangbokJobStatus } from "./SangbokJobStatus";
+export type { SongExtract } from "./SongExtract";
+
 // ServicePlan → program bridge (services/bulletin.rs).
 export type { ServicePlan } from "./ServicePlan";
 export type { SetlistItem } from "./SetlistItem";
