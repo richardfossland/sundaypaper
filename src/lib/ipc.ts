@@ -20,7 +20,9 @@ import type {
   AssetLibEntry,
   Block,
   DocTemplate,
+  BatchExportResult,
   Document,
+  ExportOptions,
   ImportJob,
   PdfInfo,
   LayoutMeta,
@@ -316,6 +318,23 @@ export const bulletin = {
   typstCompile: (source: string) => call<string>("typst_compile", { source }),
 };
 
+// ── Batch export (Phase 6) ───────────────────────────────────────────────────
+// Render a set of documents to PDF files in one pass, applying one set of
+// options (paper size, large-print scaling, language) to all of them. Reuses
+// the exact render→compile chain the Builder/Editor run. Needs a build with the
+// `typst` cargo feature; otherwise rejects with a "feature_disabled" IPCError.
+
+export const exporter = {
+  /** Render `documentIds` to PDFs in `outDir`. Returns where the files landed
+   *  plus one entry per written PDF, in request order. */
+  batch: (documentIds: string[], options: ExportOptions, outDir: string) =>
+    call<BatchExportResult>("bulletin_batch_export", {
+      documentIds,
+      options,
+      outDir,
+    }),
+};
+
 // ── Sangbok-klipper (Phase 3.1 OCR prep) ─────────────────────────────────────
 
 export const sangbok = {
@@ -342,6 +361,7 @@ export const ipc = {
   pdf,
   pdfOps,
   bulletin,
+  exporter,
   sangbok,
 };
 

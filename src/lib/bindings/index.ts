@@ -47,6 +47,11 @@ export type { FormField } from "./FormField";
 // Layout engine: block tree → Typst source (services/layout/markup.rs).
 export type { LayoutMeta } from "./LayoutMeta";
 
+// Batch export: many documents → PDFs in one pass (services/export.rs).
+export type { ExportOptions } from "./ExportOptions";
+export type { ExportedFile } from "./ExportedFile";
+export type { BatchExportResult } from "./BatchExportResult";
+
 /** Error shape returned by every Tauri command (see error.rs).
  *  Keep this union in sync with `AppError::code()` in Rust. */
 export interface AppError {

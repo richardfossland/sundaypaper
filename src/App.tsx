@@ -10,6 +10,7 @@ import { SangbokPanel } from "@/features/sangbok/SangbokPanel";
 import { BuilderPage } from "@/features/builder/BuilderPage";
 import { EditorPage } from "@/features/editor/EditorPage";
 import { FormsPage } from "@/features/forms/FormsPage";
+import { ExportPage } from "@/features/export/ExportPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 
 function App() {
@@ -36,6 +37,8 @@ function App() {
           <EditorPage />
         ) : route === "forms" ? (
           <FormsPage />
+        ) : route === "export" ? (
+          <ExportPage />
         ) : route === "splitter" ? (
           <SangbokPanel />
         ) : route === "settings" ? (
