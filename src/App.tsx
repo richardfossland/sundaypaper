@@ -8,6 +8,7 @@ import { DesignPage } from "@/features/design/DesignPage";
 import { AssetsPanel } from "@/features/assets/AssetsPanel";
 import { SangbokPanel } from "@/features/sangbok/SangbokPanel";
 import { BuilderPage } from "@/features/builder/BuilderPage";
+import { EditorPage } from "@/features/editor/EditorPage";
 
 function App() {
   const [route, setRoute] = useState<Route>("dashboard");
@@ -29,6 +30,8 @@ function App() {
           <AssetsPanel />
         ) : route === "builder" ? (
           <BuilderPage />
+        ) : route === "editor" ? (
+          <EditorPage />
         ) : route === "splitter" ? (
           <SangbokPanel />
         ) : (
