@@ -8,6 +8,7 @@ import { DesignPage } from "@/features/design/DesignPage";
 import { AssetsPanel } from "@/features/assets/AssetsPanel";
 import { SangbokPanel } from "@/features/sangbok/SangbokPanel";
 import { BuilderPage } from "@/features/builder/BuilderPage";
+import { TemplatesPanel } from "@/features/templates/TemplatesPanel";
 import { EditorPage } from "@/features/editor/EditorPage";
 import { FormsPage } from "@/features/forms/FormsPage";
 import { ExportPage } from "@/features/export/ExportPage";
@@ -33,6 +34,8 @@ function App() {
           <AssetsPanel />
         ) : route === "builder" ? (
           <BuilderPage />
+        ) : route === "templates" ? (
+          <TemplatesPanel />
         ) : route === "editor" ? (
           <EditorPage />
         ) : route === "forms" ? (
@@ -65,6 +68,7 @@ function Placeholder({
   > = {
     library: { title: "Ressursbibliotek", phase: "Phase 2.3" },
     builder: { title: "Dokumentbygger", phase: "Phase 4.3" },
+    templates: { title: "Malbygger", phase: "Phase 4.2" },
     splitter: { title: "Sangbok-klipper", phase: "Phase 3" },
     editor: { title: "PDF-editor", phase: "Phase 7.1" },
     forms: { title: "Skjema", phase: "Phase 7.2" },

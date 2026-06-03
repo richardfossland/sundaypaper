@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Library,
   LayoutTemplate,
+  PenSquare,
   Scissors,
   FileText,
   ClipboardList,
@@ -17,6 +18,7 @@ type Route =
   | "dashboard"
   | "library"
   | "builder"
+  | "templates"
   | "splitter"
   | "editor"
   | "forms"
@@ -34,6 +36,7 @@ const NAV_ITEMS: Array<{ id: Route; label: string; icon: typeof Library }> = [
   { id: "dashboard", label: "Dashbord", icon: LayoutDashboard },
   { id: "library", label: "Bibliotek", icon: Library },
   { id: "builder", label: "Bygger", icon: LayoutTemplate },
+  { id: "templates", label: "Maler", icon: PenSquare },
   { id: "splitter", label: "Klipper", icon: Scissors },
   { id: "editor", label: "Editor", icon: FileText },
   { id: "forms", label: "Skjema", icon: ClipboardList },
