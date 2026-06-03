@@ -14,7 +14,7 @@
  * The panel is designed to slot into the "library" route in App.tsx.
  */
 
-import { useState, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ImageIcon,
@@ -27,6 +27,8 @@ import {
   Upload,
   Loader2,
   FolderOpen,
+  Search,
+  X,
 } from "lucide-react";
 
 import { ipc, IPCError } from "@/lib/ipc";
@@ -51,6 +53,23 @@ const FILTER_OPTIONS: Array<{ value: AssetKind | "all"; label: string }> = [
   { value: "RecurringBlock", label: "Gjenbruk" },
   { value: "Font", label: "Skrifttyper" },
 ];
+
+// ── Tag helpers ─────────────────────────────────────────────────────────────
+
+/** Split a comma-separated tag string into a clean, de-duplicated list. */
+function parseTags(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.split(",")) {
+    const tag = part.trim();
+    if (tag && !seen.has(tag.toLowerCase())) {
+      seen.add(tag.toLowerCase());
+      out.push(tag);
+    }
+  }
+  return out;
+}
 
 // ── Icon per kind ─────────────────────────────────────────────────────────────
 
@@ -84,19 +103,16 @@ function AssetCard({
   entry,
   onDelete,
   onOpen,
+  onTagClick,
   isDeleting,
 }: {
   entry: AssetLibEntry;
   onDelete: (id: string) => void;
   onOpen: (id: string) => void;
+  onTagClick: (tag: string) => void;
   isDeleting: boolean;
 }) {
-  const tags = entry.tags
-    ? entry.tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean)
-    : [];
+  const tags = parseTags(entry.tags);
   const accent = KIND_ACCENT[entry.kind];
 
   return (
@@ -126,12 +142,15 @@ function AssetCard({
       {tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {tags.map((tag) => (
-            <span
+            <button
               key={tag}
-              className="rounded-full border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-2 py-0.5 text-[10px] text-[var(--color-fg-muted)]"
+              type="button"
+              aria-label={`Filtrer på ${tag}`}
+              onClick={() => onTagClick(tag)}
+              className="rounded-full border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-2 py-0.5 text-[10px] text-[var(--color-fg-muted)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-accent)]"
             >
               {tag}
-            </span>
+            </button>
           ))}
         </div>
       )}
@@ -373,6 +392,8 @@ const QUERY_KEY = ["assets", "lib"] as const;
 export function AssetsPanel() {
   const qc = useQueryClient();
   const [kindFilter, setKindFilter] = useState<AssetKind | "all">("all");
+  const [search, setSearch] = useState("");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [pending, setPending] = useState<PendingFile | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -458,7 +479,38 @@ export function AssetsPanel() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const entries: AssetLibEntry[] = query.data ?? [];
+  const entries: AssetLibEntry[] = useMemo(
+    () => query.data ?? [],
+    [query.data],
+  );
+
+  // The union of every tag across the (kind-filtered) result set, for the
+  // clickable tag-filter row. Sorted alphabetically for stable order.
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of entries) for (const t of parseTags(e.tags)) set.add(t);
+    return [...set].sort((a, b) => a.localeCompare(b, "nb"));
+  }, [entries]);
+
+  // Client-side narrowing on top of the server's kind filter: free-text search
+  // over name + tags, plus an optional single-tag pin.
+  const visibleEntries = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    const tagNeedle = tagFilter?.toLowerCase();
+    return entries.filter((e) => {
+      const tags = parseTags(e.tags);
+      if (tagNeedle && !tags.some((t) => t.toLowerCase() === tagNeedle)) {
+        return false;
+      }
+      if (!needle) return true;
+      return (
+        e.name.toLowerCase().includes(needle) ||
+        tags.some((t) => t.toLowerCase().includes(needle))
+      );
+    });
+  }, [entries, search, tagFilter]);
+
+  const isFiltered = search.trim().length > 0 || tagFilter !== null;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -497,6 +549,65 @@ export function AssetsPanel() {
             {opt.label}
           </button>
         ))}
+      </div>
+
+      {/* Search + tag filter */}
+      <div className="flex flex-col gap-2 border-b border-[var(--color-border)] px-6 py-2.5">
+        <div className="relative">
+          <Search
+            size={14}
+            aria-hidden
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-fg-muted)]"
+          />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Søk i ressurser"
+            placeholder="Søk på navn eller tagg …"
+            className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-surface)] py-1.5 pl-8 pr-8 text-sm outline-none focus:border-[var(--color-accent)]"
+          />
+          {search && (
+            <button
+              type="button"
+              aria-label="Tøm søk"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {allTags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {allTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                aria-pressed={tagFilter === tag}
+                onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
+                className={cn(
+                  "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                  tagFilter === tag
+                    ? "bg-[var(--color-accent)] text-[var(--color-accent-fg)]"
+                    : "border border-[var(--color-border)] text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]",
+                )}
+              >
+                #{tag}
+              </button>
+            ))}
+            {tagFilter && (
+              <button
+                type="button"
+                onClick={() => setTagFilter(null)}
+                className="text-[11px] text-[var(--color-fg-muted)] underline hover:text-[var(--color-fg)]"
+              >
+                Nullstill tagg
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Main scrollable area */}
@@ -578,9 +689,31 @@ export function AssetsPanel() {
                 : `Ingen ${KIND_LABELS[kindFilter as AssetKind].toLowerCase()}-er i biblioteket ennå.`}
             </p>
           </div>
+        ) : visibleEntries.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <Search
+              size={36}
+              className="text-[var(--color-fg-muted)] opacity-40"
+            />
+            <p className="text-sm text-[var(--color-fg-muted)]">
+              Ingen treff for søket.
+            </p>
+            {isFiltered && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setTagFilter(null);
+                }}
+                className="text-xs text-[var(--color-accent)] underline"
+              >
+                Tøm filter
+              </button>
+            )}
+          </div>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
-            {entries.map((entry) => (
+            {visibleEntries.map((entry) => (
               <AssetCard
                 key={entry.id}
                 entry={entry}
@@ -590,6 +723,7 @@ export function AssetsPanel() {
                 }
                 onDelete={(id) => deleteMutation.mutate(id)}
                 onOpen={(id) => openMutation.mutate(id)}
+                onTagClick={(tag) => setTagFilter(tag)}
               />
             ))}
           </div>
