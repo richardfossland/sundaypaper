@@ -47,7 +47,7 @@ impl DocTemplateKind {
         }
     }
 
-    pub fn from_str(s: &str) -> AppResult<Self> {
+    pub fn parse(s: &str) -> AppResult<Self> {
         match s {
             "Bulletin" => Ok(DocTemplateKind::Bulletin),
             "SongSheet" => Ok(DocTemplateKind::SongSheet),
@@ -88,7 +88,7 @@ impl TemplateVarKind {
         }
     }
 
-    pub fn from_str(s: &str) -> AppResult<Self> {
+    pub fn parse(s: &str) -> AppResult<Self> {
         match s {
             "Text" => Ok(TemplateVarKind::Text),
             "Number" => Ok(TemplateVarKind::Number),
@@ -208,7 +208,7 @@ impl DocTemplateRepo {
             return Err(AppError::Validation("template name is required".into()));
         }
         // Validate kind.
-        DocTemplateKind::from_str(kind)?;
+        DocTemplateKind::parse(kind)?;
 
         let id = Uuid::now_v7().to_string();
         let now = now_ms();
@@ -228,7 +228,7 @@ impl DocTemplateRepo {
 
         // Insert variable definitions.
         for (pos, var) in variables.iter().enumerate() {
-            TemplateVarKind::from_str(&var.kind)?;
+            TemplateVarKind::parse(&var.kind)?;
             let var_id = Uuid::now_v7().to_string();
             sqlx::query(
                 "INSERT INTO template_var \
@@ -315,7 +315,7 @@ impl DocTemplateRepo {
         if name.is_empty() {
             return Err(AppError::Validation("template name is required".into()));
         }
-        DocTemplateKind::from_str(kind)?;
+        DocTemplateKind::parse(kind)?;
 
         let affected = sqlx::query(
             "UPDATE doc_template \
@@ -783,7 +783,7 @@ mod tests {
             DocTemplateKind::LargeText,
         ] {
             let s = kind.as_str();
-            let back = DocTemplateKind::from_str(s).unwrap();
+            let back = DocTemplateKind::parse(s).unwrap();
             assert_eq!(kind, back, "round-trip failed for {s}");
         }
     }
@@ -791,7 +791,7 @@ mod tests {
     #[test]
     fn doc_template_kind_rejects_unknown() {
         assert!(matches!(
-            DocTemplateKind::from_str("Flyer").unwrap_err(),
+            DocTemplateKind::parse("Flyer").unwrap_err(),
             AppError::Validation(_)
         ));
     }
@@ -807,7 +807,7 @@ mod tests {
             TemplateVarKind::ScriptureRef,
         ] {
             let s = kind.as_str();
-            let back = TemplateVarKind::from_str(s).unwrap();
+            let back = TemplateVarKind::parse(s).unwrap();
             assert_eq!(kind, back, "round-trip failed for {s}");
         }
     }
@@ -815,7 +815,7 @@ mod tests {
     #[test]
     fn template_var_kind_rejects_unknown() {
         assert!(matches!(
-            TemplateVarKind::from_str("Image").unwrap_err(),
+            TemplateVarKind::parse("Image").unwrap_err(),
             AppError::Validation(_)
         ));
     }

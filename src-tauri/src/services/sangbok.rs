@@ -42,7 +42,7 @@ impl SangbokJobStatus {
         }
     }
 
-    pub fn from_str(s: &str) -> AppResult<Self> {
+    pub fn parse(s: &str) -> AppResult<Self> {
         match s {
             "Queued" => Ok(SangbokJobStatus::Queued),
             "Processing" => Ok(SangbokJobStatus::Processing),
@@ -204,7 +204,7 @@ impl SangbokRepo {
     /// to `Failed` with a "cancelled" detail. Terminal jobs cannot be cancelled.
     pub async fn cancel(&self, id: &str) -> AppResult<SangbokJob> {
         let job = self.get(id).await?;
-        if SangbokJobStatus::from_str(&job.status)?.is_terminal() {
+        if SangbokJobStatus::parse(&job.status)?.is_terminal() {
             return Err(AppError::Validation(format!(
                 "sangbok_job {id} is already in terminal state '{}'",
                 job.status
@@ -230,7 +230,7 @@ impl SangbokRepo {
     /// body when the `ocr` cargo feature lands (Phase 3.1).
     pub async fn process(&self, id: &str) -> AppResult<SangbokJob> {
         let job = self.get(id).await?;
-        if SangbokJobStatus::from_str(&job.status)?.is_terminal() {
+        if SangbokJobStatus::parse(&job.status)?.is_terminal() {
             return Err(AppError::Validation(format!(
                 "sangbok_job {id} cannot be processed from terminal state '{}'",
                 job.status
@@ -420,7 +420,7 @@ mod tests {
             SangbokJobStatus::Done,
             SangbokJobStatus::Failed,
         ] {
-            let back = SangbokJobStatus::from_str(s.as_str()).unwrap();
+            let back = SangbokJobStatus::parse(s.as_str()).unwrap();
             assert_eq!(s, back);
         }
     }
@@ -428,7 +428,7 @@ mod tests {
     #[test]
     fn status_unknown_is_validation_error() {
         assert!(matches!(
-            SangbokJobStatus::from_str("Running").unwrap_err(),
+            SangbokJobStatus::parse("Running").unwrap_err(),
             AppError::Validation(_)
         ));
     }
