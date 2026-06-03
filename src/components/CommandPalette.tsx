@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Library,
   LayoutTemplate,
+  PenSquare,
   Scissors,
   FileText,
   ClipboardList,
@@ -93,6 +94,11 @@ export function CommandPalette({ onNavigate }: CommandPaletteProps) {
               onSelect={() => go("builder")}
               icon={<LayoutTemplate size={14} />}
               label="Bygger"
+            />
+            <Item
+              onSelect={() => go("templates")}
+              icon={<PenSquare size={14} />}
+              label="Maler"
             />
             <Item
               onSelect={() => go("splitter")}

@@ -11,6 +11,7 @@ pub mod block;
 pub mod bulletin;
 pub mod doc_template;
 pub mod document;
+pub mod export;
 pub mod import_job;
 pub mod pdf;
 pub mod pdf_ops;

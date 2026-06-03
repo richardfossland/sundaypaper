@@ -72,6 +72,7 @@ pub fn run() {
             commands::bulletin::bulletin_generate,
             commands::bulletin::bulletin_render,
             commands::bulletin::typst_compile,
+            commands::export::bulletin_batch_export,
             commands::asset::asset_create,
             commands::asset::asset_get,
             commands::asset::asset_list,
