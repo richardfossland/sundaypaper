@@ -41,6 +41,9 @@ export type { ScriptureRef } from "./ScriptureRef";
 export type { AssetRef } from "./AssetRef";
 export type { BlockSpec } from "./BlockSpec";
 
+// Layout engine: block tree → Typst source (services/layout/markup.rs).
+export type { LayoutMeta } from "./LayoutMeta";
+
 /** Error shape returned by every Tauri command (see error.rs).
  *  Keep this union in sync with `AppError::code()` in Rust. */
 export interface AppError {

@@ -23,8 +23,10 @@ import type {
   Document,
   ImportJob,
   PdfInfo,
+  LayoutMeta,
   Project,
   SangbokJob,
+  ServicePlan,
   Setting,
   Song,
   Template,
@@ -290,6 +292,21 @@ export const docTemplate = {
   seedBuiltins: () => call<void>("doc_template_seed_builtins"),
 };
 
+// ── Bulletin (SundayPlan → program bridge) ───────────────────────────────────
+// The FORWARD pipeline: a service plan becomes a `program` document of blocks
+// (`generate`), and that block tree renders to Typst source (`render`).
+
+export const bulletin = {
+  /** Generate a `program` document from a planned service. Returns the new doc;
+   *  list its blocks via `ipc.block.list`. */
+  generate: (projectId: string, plan: ServicePlan, title?: string) =>
+    call<Document>("bulletin_generate", { projectId, plan, title }),
+  /** Render a document's block tree to Typst source. `layoutMeta` is optional;
+   *  when omitted the document's page size seeds the page metadata. */
+  render: (docId: string, layoutMeta?: LayoutMeta) =>
+    call<string>("bulletin_render", { documentId: docId, layoutMeta }),
+};
+
 // ── Sangbok-klipper (Phase 3.1 OCR prep) ─────────────────────────────────────
 
 export const sangbok = {
@@ -315,6 +332,7 @@ export const ipc = {
   setting,
   pdf,
   pdfOps,
+  bulletin,
   sangbok,
 };
 

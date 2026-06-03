@@ -10,9 +10,10 @@
 use tauri::State;
 
 use crate::error::AppResult;
-use crate::services::block::BlockRepo;
+use crate::services::block::{Block, BlockRepo};
 use crate::services::bulletin::{build_bulletin, ServicePlan};
 use crate::services::document::{Document, DocumentRepo};
+use crate::services::layout::markup::{build_typst_document, LayoutMeta, RenderBlock};
 use crate::AppState;
 
 /// Generate a printable program document from a planned service.
@@ -63,6 +64,65 @@ pub async fn bulletin_generate(
     }
 
     Ok(document)
+}
+
+/// Render a document's block tree to Typst source — the second half of the
+/// FORWARD pipeline (`bulletin_generate` builds the tree, this renders it).
+///
+/// Steps, in order:
+/// 1. Fetch the document record (404 if it's gone or soft-deleted) — its
+///    `page_size` seeds the page metadata when the caller doesn't override it.
+/// 2. List the document's blocks (flat, position-ordered) and rebuild the tree
+///    by grouping on `parent_id`.
+/// 3. `build_typst_document(&meta, &blocks)` — pure markup assembly.
+///
+/// Returns the Typst source string. Compiling it to a PDF is a later, gated step
+/// (the `typst` cargo feature); the source here is fully usable / inspectable on
+/// its own. `layout_meta` is optional: when omitted we derive a sensible
+/// `LayoutMeta` from the document's page size.
+#[tauri::command]
+pub async fn bulletin_render(
+    state: State<'_, AppState>,
+    document_id: String,
+    layout_meta: Option<LayoutMeta>,
+) -> AppResult<String> {
+    let document = DocumentRepo::new(state.db.clone()).get(&document_id).await?;
+
+    let rows = BlockRepo::new(state.db.clone())
+        .list_by_document(&document_id)
+        .await?;
+    let blocks = build_render_tree(&rows);
+
+    // Caller override wins; otherwise seed the page size from the document and
+    // keep the rest of `LayoutMeta`'s defaults.
+    let meta = layout_meta.unwrap_or_else(|| LayoutMeta {
+        paper: document.page_size.clone(),
+        ..LayoutMeta::default()
+    });
+
+    Ok(build_typst_document(&meta, &blocks))
+}
+
+/// Rebuild the ordered block tree from a flat, position-sorted block list.
+///
+/// `list_by_document` returns every block in `position` order; here we group the
+/// rows by `parent_id` so each node carries its children, then assemble the
+/// top-level forest (`parent_id IS NULL`). Children inherit their parent's
+/// order because we visit the flat list in its existing `position` order. A row
+/// whose `data` doesn't parse degrades to an empty object via
+/// [`RenderBlock::from_spec`], so a single bad payload never sinks the render.
+fn build_render_tree(rows: &[Block]) -> Vec<RenderBlock> {
+    fn children_of(rows: &[Block], parent_id: Option<&str>) -> Vec<RenderBlock> {
+        rows.iter()
+            .filter(|b| b.parent_id.as_deref() == parent_id)
+            .map(|b| {
+                let mut node = RenderBlock::from_spec(&b.kind, &b.data);
+                node.children = children_of(rows, Some(&b.id));
+                node
+            })
+            .collect()
+    }
+    children_of(rows, None)
 }
 
 #[cfg(test)]
@@ -241,5 +301,183 @@ mod tests {
         assert_eq!(blocks[1].kind, "liturgy"); // welcome
         assert_eq!(blocks[2].kind, "song");
         assert_eq!(blocks[3].kind, "liturgy"); // benediction
+    }
+
+    // --- bulletin_render -----------------------------------------------------
+    // Like the generate tests above, the command takes `State<'_, AppState>`
+    // which we can't build in a unit test, so these exercise the same sequence
+    // the command performs (fetch document → list blocks → build_render_tree →
+    // build_typst_document) directly against a temp in-memory db, plus the pure
+    // `build_render_tree` helper in isolation.
+
+    async fn render(db: &Db, document: &Document, meta: Option<LayoutMeta>) -> String {
+        let rows = BlockRepo::new(db.clone())
+            .list_by_document(&document.id)
+            .await
+            .unwrap();
+        let blocks = build_render_tree(&rows);
+        let meta = meta.unwrap_or_else(|| LayoutMeta {
+            paper: document.page_size.clone(),
+            ..LayoutMeta::default()
+        });
+        build_typst_document(&meta, &blocks)
+    }
+
+    #[tokio::test]
+    async fn render_roundtrips_a_generated_plan_into_typst() {
+        // End-to-end FORWARD pipeline: ServicePlan → generate → blocks → render.
+        let db = Db::connect_memory().await.unwrap();
+        let pid = project(&db).await;
+        let doc = persist(&db, &pid, &plan()).await;
+
+        let src = render(&db, &doc, None).await;
+
+        // Preamble + helpers are present.
+        assert!(src.contains("#set page(paper: \"a4\""));
+        assert!(src.contains("#let bp-title"));
+        // The leading header becomes a bp-title with subtitle.
+        assert!(src.contains("#bp-title([Sunday Worship], sub: [St. Olav's]"));
+        // The song carries its hymnal number prefix.
+        assert!(src.contains("#bp-heading([N13 097 — Holy, Holy, Holy])"));
+        // The scripture reading prints its reference as a byline under the title.
+        assert!(src.contains("#bp-heading([First Reading])"));
+        assert!(src.contains("#bp-byline([John 3:16])"));
+    }
+
+    #[tokio::test]
+    async fn render_preserves_block_order_in_the_source() {
+        let db = Db::connect_memory().await.unwrap();
+        let pid = project(&db).await;
+        let doc = persist(&db, &pid, &plan()).await;
+
+        let src = render(&db, &doc, None).await;
+        // Title before the song before the benediction — printed order matches
+        // the setlist order.
+        let title = src.find("[Sunday Worship]").unwrap();
+        let song = src.find("Holy, Holy, Holy").unwrap();
+        let benediction = src.find("[Benediction]").unwrap();
+        assert!(title < song && song < benediction);
+    }
+
+    #[tokio::test]
+    async fn render_of_empty_document_is_preamble_only() {
+        // A document with no blocks renders just the preamble — no block markup,
+        // and it still compiles (helpers + page setup are all there).
+        let db = Db::connect_memory().await.unwrap();
+        let pid = project(&db).await;
+        let doc = DocumentRepo::new(db.clone())
+            .create(&pid, "Empty", "program", "A4")
+            .await
+            .unwrap();
+
+        let src = render(&db, &doc, None).await;
+        assert!(src.contains("#set page(paper: \"a4\""));
+        assert!(src.contains("#let bp-title"));
+        assert!(!src.contains("#bp-heading("), "no blocks → no section markup");
+    }
+
+    #[tokio::test]
+    async fn render_uses_document_page_size_when_meta_absent() {
+        // A5 document with no override → the page size flows into the preamble.
+        let db = Db::connect_memory().await.unwrap();
+        let pid = project(&db).await;
+        let doc = DocumentRepo::new(db.clone())
+            .create(&pid, "Sheet", "program", "A5")
+            .await
+            .unwrap();
+
+        let src = render(&db, &doc, None).await;
+        assert!(src.contains("paper: \"a5\""));
+    }
+
+    #[tokio::test]
+    async fn render_layout_meta_override_wins_over_document() {
+        // An explicit LayoutMeta takes precedence and its fields propagate into
+        // the preamble (paper, font size, lang).
+        let db = Db::connect_memory().await.unwrap();
+        let pid = project(&db).await;
+        let doc = DocumentRepo::new(db.clone())
+            .create(&pid, "Sheet", "program", "A4")
+            .await
+            .unwrap();
+
+        let meta = LayoutMeta {
+            paper: "us-letter".into(),
+            font_size_pt: 14.0,
+            lang: Some("nb".into()),
+        };
+        let src = render(&db, &doc, Some(meta)).await;
+        assert!(src.contains("paper: \"us-letter\""));
+        assert!(src.contains("size: 14pt"));
+        assert!(src.contains("lang: \"nb\""));
+    }
+
+    #[test]
+    fn build_render_tree_nests_children_under_their_parent() {
+        // Two top-level blocks; the first owns a child. The tree groups by
+        // parent_id and keeps the flat position order.
+        let now = 0;
+        let parent = Block {
+            id: "p".into(),
+            document_id: "d".into(),
+            parent_id: None,
+            kind: "liturgy".into(),
+            position: 0,
+            data: r#"{"title":"Section"}"#.into(),
+            created_at: now,
+            updated_at: now,
+        };
+        let child = Block {
+            id: "c".into(),
+            document_id: "d".into(),
+            parent_id: Some("p".into()),
+            kind: "text".into(),
+            position: 0,
+            data: r#"{"text":"child line"}"#.into(),
+            created_at: now,
+            updated_at: now,
+        };
+        let sibling = Block {
+            id: "s".into(),
+            document_id: "d".into(),
+            parent_id: None,
+            kind: "song".into(),
+            position: 1,
+            data: r#"{"title":"Hymn"}"#.into(),
+            created_at: now,
+            updated_at: now,
+        };
+
+        let tree = build_render_tree(&[parent, child, sibling]);
+        assert_eq!(tree.len(), 2, "two top-level blocks");
+        assert_eq!(tree[0].kind, "liturgy");
+        assert_eq!(tree[0].children.len(), 1, "parent owns its child");
+        assert_eq!(tree[0].children[0].kind, "text");
+        assert!(tree[1].children.is_empty(), "sibling has no children");
+
+        // And the child renders after its parent in the source.
+        let src = build_typst_document(&LayoutMeta::default(), &tree);
+        let p = src.find("#bp-heading([Section])").unwrap();
+        let c = src.find("#par[child line]").unwrap();
+        assert!(p < c);
+    }
+
+    #[test]
+    fn build_render_tree_tolerates_unparseable_data() {
+        // A row with garbage data degrades to an empty object rather than
+        // panicking, so one bad block can't sink the whole render.
+        let row = Block {
+            id: "x".into(),
+            document_id: "d".into(),
+            parent_id: None,
+            kind: "text".into(),
+            position: 0,
+            data: "not json".into(),
+            created_at: 0,
+            updated_at: 0,
+        };
+        let tree = build_render_tree(&[row]);
+        assert_eq!(tree.len(), 1);
+        assert_eq!(tree[0].data, serde_json::json!({}));
     }
 }
