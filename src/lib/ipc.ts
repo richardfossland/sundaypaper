@@ -23,8 +23,10 @@ import type {
   Document,
   ImportJob,
   PdfInfo,
+  LayoutMeta,
   Project,
   SangbokJob,
+  ServicePlan,
   Setting,
   Song,
   Template,
@@ -117,6 +119,10 @@ export const block = {
   list: (documentId: string) => call<Block[]>("block_list", { documentId }),
   update: (id: string, kind: string, data: string) =>
     call<Block>("block_update", { id, kind, data }),
+  /** Move a block to `newPosition` within its sibling group; positions of the
+   *  affected siblings renormalise to a dense `0..N` range on the backend. */
+  reorder: (id: string, newPosition: number) =>
+    call<Block>("block_reorder", { id, newPosition }),
   delete: (id: string) => call<void>("block_delete", { id }),
 };
 
@@ -290,6 +296,26 @@ export const docTemplate = {
   seedBuiltins: () => call<void>("doc_template_seed_builtins"),
 };
 
+// ── Bulletin (SundayPlan → program bridge) ───────────────────────────────────
+// The FORWARD pipeline: a service plan becomes a `program` document of blocks
+// (`generate`), and that block tree renders to Typst source (`render`).
+
+export const bulletin = {
+  /** Generate a `program` document from a planned service. Returns the new doc;
+   *  list its blocks via `ipc.block.list`. */
+  generate: (projectId: string, plan: ServicePlan, title?: string) =>
+    call<Document>("bulletin_generate", { projectId, plan, title }),
+  /** Render a document's block tree to Typst source. `layoutMeta` is optional;
+   *  when omitted the document's page size seeds the page metadata. */
+  render: (docId: string, layoutMeta?: LayoutMeta) =>
+    call<string>("bulletin_render", { documentId: docId, layoutMeta }),
+  /** Compile Typst source to a PDF, returned as base64 (no data-URL prefix) so
+   *  it can drop straight into a download or `<embed src="data:…;base64,…">`.
+   *  Needs a build with the `typst` cargo feature; otherwise rejects with an
+   *  IPCError whose code is "feature_disabled". */
+  typstCompile: (source: string) => call<string>("typst_compile", { source }),
+};
+
 // ── Sangbok-klipper (Phase 3.1 OCR prep) ─────────────────────────────────────
 
 export const sangbok = {
@@ -315,6 +341,7 @@ export const ipc = {
   setting,
   pdf,
   pdfOps,
+  bulletin,
   sangbok,
 };
 

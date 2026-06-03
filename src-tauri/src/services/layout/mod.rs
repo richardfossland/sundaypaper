@@ -1,7 +1,17 @@
-//! Layout engine — block tree → Typst source (Phase 4.2).
+//! Layout engine — block tree → Typst source → PDF (Phase 4.2).
 //!
-//! Pure markup generation: a rendered block list + page metadata become a Typst
-//! document string. No PDF is produced here (that's the `pdf` feature via
-//! pdfium/Typst at the seam); this module is fully unit-testable string-building.
+//! Two halves, same split as the `pdf` layer:
+//!   - `markup` — pure block tree → Typst **source string**. Always compiled and
+//!     exhaustively unit-tested; no compiler, no I/O.
+//!   - `engine` — Typst **source string → PDF bytes**. The embedded compiler is
+//!     heavy, so it sits behind the `typst` cargo feature; the default build
+//!     compiles without it and `compile` returns a clear `feature_disabled`
+//!     error. This is the final FORWARD-pipeline step:
+//!
+//! ```text
+//! ServicePlan --build_bulletin--> BlockSpec[] --(persist)--> Block tree
+//!   --build_typst_document--> Typst source --compile--> PDF bytes
+//! ```
 
+pub mod engine;
 pub mod markup;

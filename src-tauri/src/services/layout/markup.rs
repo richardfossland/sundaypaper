@@ -10,7 +10,9 @@
 //!
 //! The builder consumes the exact JSON payloads the `bulletin` generator emits
 //! (`heading` / `song` / `music` / `scripture` / `liturgy` / `announcement` /
-//! `image` / `text`), so the FORWARD pipeline composes end to end:
+//! `image` / `text`) plus the form-field kinds the FormBuilder adds
+//! (`form_field` / `checkbox` / `signature`), so the FORWARD pipeline composes
+//! end to end:
 //!
 //! ```text
 //! ServicePlan --build_bulletin--> BlockSpec[] --(persist)--> Block tree
@@ -126,7 +128,19 @@ fn preamble(meta: &LayoutMeta) -> String {
          }}\n\
          #let bp-heading(t) = [#v(0.5em)#text(size: 1.2em, weight: \"bold\")[#t]#v(0.2em)]\n\
          #let bp-byline(who) = if who != none {{ text(size: 0.85em, style: \"italic\")[#who] }}\n\
-         #let bp-time(t) = if t != none {{ box(width: 3em)[#text(fill: gray)[#t]] }}\n\n",
+         #let bp-time(t) = if t != none {{ box(width: 3em)[#text(fill: gray)[#t]] }}\n\
+         // Form-field helpers. SundayPaper renders forms as printable fields —\n\
+         // a labelled rule a person fills in by hand — so member data never has\n\
+         // to leave the machine (no cloud round-trip to fill a PDF).\n\
+         #let bp-field(label, hint: none, width: 100%) = block(below: 0.7em)[\n  \
+             #if label != none {{ [#label#h(0.4em)] }}\n  \
+             #box(width: width, stroke: (bottom: 0.5pt + black), inset: (bottom: 2pt))[#if hint != none {{ text(size: 0.8em, fill: gray)[#hint] }} else {{ [~] }}]\n\
+         ]\n\
+         #let bp-check(label) = block(below: 0.5em)[#box(width: 0.9em, height: 0.9em, stroke: 0.5pt + black) #h(0.4em) #if label != none {{ [#label] }}]\n\
+         #let bp-sign(label, width: 60%) = block(below: 0.8em)[\n  \
+             #box(width: width, stroke: (bottom: 0.5pt + black), inset: (bottom: 2pt))[~]\n  \
+             #if label != none {{ [\\\n#text(size: 0.8em, fill: gray)[#label]] }}\n\
+         ]\n\n",
     )
 }
 
@@ -150,6 +164,9 @@ fn render_block(block: &RenderBlock) -> String {
         "liturgy" => s.push_str(&render_liturgy(d)),
         "announcement" => s.push_str(&render_announcement(d)),
         "image" => s.push_str(&render_image(d)),
+        "form_field" => s.push_str(&render_form_field(d)),
+        "checkbox" => s.push_str(&render_checkbox(d)),
+        "signature" => s.push_str(&render_signature(d)),
         // "text" and any unknown future kind.
         _ => s.push_str(&render_text(d)),
     }
@@ -291,6 +308,42 @@ fn render_image(d: &serde_json::Value) -> String {
     }
 }
 
+/// `form_field` — a fillable text field: a label followed by an underlined
+/// blank a person writes into (name, e-mail, phone, amount…). An optional
+/// `hint` prints faint placeholder text inside the rule; an optional `width`
+/// (`full` / `half` / `third` / `quarter`) sizes the rule so several short
+/// fields can share a printed line conceptually. Privacy by design: the field
+/// is a printed blank, so no member data is ever embedded or transmitted.
+fn render_form_field(d: &serde_json::Value) -> String {
+    let label = field(d, "label").or_else(|| field(d, "title"));
+    let width = field_width(d);
+    format!(
+        "#bp-field({}, hint: {}, width: {})\n",
+        content_arg(&label),
+        content_arg(&field(d, "hint")),
+        width
+    )
+}
+
+/// `checkbox` — a printed empty box with a label, for opt-ins, attendance
+/// ticks, "I consent" lines and the like.
+fn render_checkbox(d: &serde_json::Value) -> String {
+    let label = field(d, "label").or_else(|| field(d, "title"));
+    format!("#bp-check({})\n", content_arg(&label))
+}
+
+/// `signature` — a wider rule to sign on, with the label printed small beneath
+/// it (e.g. "Signature", "Date"). Defaults to a half-ish width line.
+fn render_signature(d: &serde_json::Value) -> String {
+    let label = field(d, "label")
+        .or_else(|| field(d, "title"))
+        .or_else(|| Some("Signature".to_string()));
+    // A signature line defaults to a comfortable 60%; an explicit width keyword
+    // overrides it.
+    let width = field_width_or(d, "60%");
+    format!("#bp-sign({}, width: {})\n", content_arg(&label), width)
+}
+
 /// `text` and the fallback for unknown kinds — an optional bold title + body.
 fn render_text(d: &serde_json::Value) -> String {
     let mut s = String::new();
@@ -319,6 +372,28 @@ fn field(d: &serde_json::Value, key: &str) -> Option<String> {
 /// an empty string when absent.
 fn role(d: &serde_json::Value) -> &str {
     d.get("role").and_then(serde_json::Value::as_str).unwrap_or("")
+}
+
+/// Map a form field's optional `width` keyword to a Typst length literal for the
+/// rule that the field/signature draws. Only a fixed set of keywords is
+/// accepted (so user input can never inject a length expression); anything else
+/// — including an absent value — falls back to a full-width rule.
+fn field_width(d: &serde_json::Value) -> &'static str {
+    field_width_or(d, "100%")
+}
+
+/// Like [`field_width`] but with a caller-chosen fallback for the absent /
+/// unrecognised case (so a signature line can default narrower than a text
+/// field). The keyword set itself is fixed, so no length expression can be
+/// injected through the payload.
+fn field_width_or(d: &serde_json::Value, default: &'static str) -> &'static str {
+    match field(d, "width").as_deref().map(str::to_ascii_lowercase) {
+        Some(w) if w == "full" => "100%",
+        Some(w) if w == "half" => "50%",
+        Some(w) if w == "third" => "33%",
+        Some(w) if w == "quarter" => "25%",
+        _ => default,
+    }
 }
 
 /// Build the "Book chapter:verse (Translation)" reference string from a
@@ -722,6 +797,87 @@ mod tests {
         assert!(src.contains("#bp-heading([Prayer])"));
         assert!(!src.contains("#bp-byline"), "blank leader → no byline");
         assert!(!src.contains("#par["), "null text → no paragraph");
+    }
+
+    // --- form fields (Phase 7.2) ----------------------------------------------
+
+    #[test]
+    fn preamble_defines_form_helpers() {
+        let src = build_typst_document(&LayoutMeta::default(), &[]);
+        assert!(src.contains("#let bp-field"));
+        assert!(src.contains("#let bp-check"));
+        assert!(src.contains("#let bp-sign"));
+    }
+
+    #[test]
+    fn form_field_emits_bp_field_with_label_hint_and_width() {
+        let b = RenderBlock::leaf(
+            "form_field",
+            json!({ "label": "Full name", "hint": "First & last", "width": "half" }),
+        );
+        let src = doc(&[b]);
+        assert!(src.contains("#bp-field([Full name], hint: [First & last], width: 50%)"));
+    }
+
+    #[test]
+    fn form_field_without_hint_or_width_uses_none_and_full_width() {
+        let b = RenderBlock::leaf("form_field", json!({ "label": "E-mail" }));
+        let src = doc(&[b]);
+        assert!(src.contains("#bp-field([E-mail], hint: none, width: 100%)"));
+    }
+
+    #[test]
+    fn form_field_falls_back_to_title_when_no_label() {
+        // The generic block editor uses `title`; forms use `label`. Accept both.
+        let b = RenderBlock::leaf("form_field", json!({ "title": "Phone" }));
+        assert!(doc(&[b]).contains("#bp-field([Phone],"));
+    }
+
+    #[test]
+    fn checkbox_emits_bp_check_with_label() {
+        let b = RenderBlock::leaf("checkbox", json!({ "label": "I consent" }));
+        assert!(doc(&[b]).contains("#bp-check([I consent])"));
+    }
+
+    #[test]
+    fn signature_emits_bp_sign_defaulting_label_and_width() {
+        // No label → the renderer supplies "Signature"; default width is 60%.
+        let b = RenderBlock::leaf("signature", json!({}));
+        let src = doc(&[b]);
+        assert!(src.contains("#bp-sign([Signature], width: 60%)"));
+    }
+
+    #[test]
+    fn signature_honours_explicit_label_and_width() {
+        let b = RenderBlock::leaf(
+            "signature",
+            json!({ "label": "Parent or guardian", "width": "full" }),
+        );
+        let src = doc(&[b]);
+        assert!(src.contains("#bp-sign([Parent or guardian], width: 100%)"));
+    }
+
+    #[test]
+    fn form_field_label_is_escaped_and_cannot_inject_markup() {
+        // A malicious label must not break out of its content block.
+        let b = RenderBlock::leaf(
+            "form_field",
+            json!({ "label": "x] #panic() [y", "hint": "$ # *" }),
+        );
+        let src = doc(&[b]);
+        assert!(src.contains("\\]"), "closing bracket is escaped");
+        assert!(src.contains("\\#panic"), "function call is neutralised");
+        assert!(!src.contains("[x] #panic"), "raw injection is impossible");
+    }
+
+    #[test]
+    fn unknown_field_width_keyword_falls_back_to_full() {
+        let b = RenderBlock::leaf(
+            "form_field",
+            json!({ "label": "Amount", "width": "ginormous" }),
+        );
+        // Unrecognised keyword → safe 100%, never an injected length.
+        assert!(doc(&[b]).contains("width: 100%)"));
     }
 
     #[test]

@@ -7,6 +7,10 @@ import { DashboardPage } from "@/features/dashboard/DashboardPage";
 import { DesignPage } from "@/features/design/DesignPage";
 import { AssetsPanel } from "@/features/assets/AssetsPanel";
 import { SangbokPanel } from "@/features/sangbok/SangbokPanel";
+import { BuilderPage } from "@/features/builder/BuilderPage";
+import { EditorPage } from "@/features/editor/EditorPage";
+import { FormsPage } from "@/features/forms/FormsPage";
+import { SettingsPage } from "@/features/settings/SettingsPage";
 
 function App() {
   const [route, setRoute] = useState<Route>("dashboard");
@@ -26,8 +30,16 @@ function App() {
           <DesignPage />
         ) : route === "library" ? (
           <AssetsPanel />
+        ) : route === "builder" ? (
+          <BuilderPage />
+        ) : route === "editor" ? (
+          <EditorPage />
+        ) : route === "forms" ? (
+          <FormsPage />
         ) : route === "splitter" ? (
           <SangbokPanel />
+        ) : route === "settings" ? (
+          <SettingsPage />
         ) : (
           <Placeholder route={route} />
         )}
