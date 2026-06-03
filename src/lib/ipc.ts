@@ -305,6 +305,11 @@ export const bulletin = {
    *  when omitted the document's page size seeds the page metadata. */
   render: (docId: string, layoutMeta?: LayoutMeta) =>
     call<string>("bulletin_render", { documentId: docId, layoutMeta }),
+  /** Compile Typst source to a PDF, returned as base64 (no data-URL prefix) so
+   *  it can drop straight into a download or `<embed src="data:…;base64,…">`.
+   *  Needs a build with the `typst` cargo feature; otherwise rejects with an
+   *  IPCError whose code is "feature_disabled". */
+  typstCompile: (source: string) => call<string>("typst_compile", { source }),
 };
 
 // ── Sangbok-klipper (Phase 3.1 OCR prep) ─────────────────────────────────────

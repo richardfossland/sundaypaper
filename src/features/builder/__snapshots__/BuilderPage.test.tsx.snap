@@ -1,0 +1,455 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`BuilderPage > matches the empty-state snapshot 1`] = `
+<div>
+  <div
+    class="flex h-full overflow-hidden"
+  >
+    <div
+      class="flex w-[440px] shrink-0 flex-col overflow-hidden border-r border-[var(--color-border)]"
+    >
+      <header
+        class="border-b border-[var(--color-border)] px-6 py-4"
+      >
+        <div
+          class="text-xs font-medium uppercase tracking-widest text-[var(--color-accent)]"
+        >
+          Phase 4.3 · Bygger
+        </div>
+        <h1
+          class="mt-0.5 text-[var(--text-ui-xl)] font-bold"
+        >
+          Dokumentbygger
+        </h1>
+        <p
+          class="mt-0.5 text-xs text-[var(--color-fg-muted)]"
+        >
+          Fra gudstjenesteplan til ferdig, utskriftsklart program.
+        </p>
+      </header>
+      <div
+        class="flex-1 space-y-6 overflow-y-auto p-6"
+      >
+        <section
+          class="space-y-2"
+        >
+          <h2
+            class="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]"
+          >
+            1 · Prosjekt
+          </h2>
+          <select
+            aria-label="Velg prosjekt"
+            class="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-2.5 py-1.5 text-sm"
+          >
+            <option
+              value=""
+            >
+              Velg prosjekt…
+            </option>
+            <option
+              value="proj-1"
+            >
+              Sommer 2026
+            </option>
+          </select>
+          <form
+            class="flex gap-2"
+          >
+            <input
+              aria-label="Nytt prosjektnavn"
+              class="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-2.5 py-1.5 text-sm"
+              placeholder="Nytt prosjekt…"
+              value=""
+            />
+            <button
+              class="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] px-2.5 py-1.5 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)] disabled:opacity-50"
+              disabled=""
+              type="submit"
+            >
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-folder-plus"
+                fill="none"
+                height="12"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="12"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M12 10v6"
+                />
+                <path
+                  d="M9 13h6"
+                />
+                <path
+                  d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"
+                />
+              </svg>
+              Opprett
+            </button>
+          </form>
+        </section>
+        <section
+          class="space-y-2"
+        >
+          <h2
+            class="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]"
+          >
+            2 · Plan
+          </h2>
+          <div
+            class="space-y-5"
+          >
+            <div
+              class="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-elevated)] p-4 shadow-[var(--shadow-soft)]"
+            >
+              <div
+                class="mb-3 flex items-center justify-between"
+              >
+                <h3
+                  class="text-sm font-semibold"
+                >
+                  Gudstjeneste
+                </h3>
+                <button
+                  class="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] px-2.5 py-1 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)] disabled:opacity-50"
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    class="lucide lucide-file-stack"
+                    fill="none"
+                    height="12"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="12"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M11 21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1"
+                    />
+                    <path
+                      d="M16 16a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1"
+                    />
+                    <path
+                      d="M21 6a2 2 0 0 0-.586-1.414l-2-2A2 2 0 0 0 17 2h-3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1z"
+                    />
+                  </svg>
+                  Last inn eksempel
+                </button>
+              </div>
+              <div
+                class="grid grid-cols-1 gap-3 sm:grid-cols-3"
+              >
+                <label
+                  class="block"
+                >
+                  <span
+                    class="mb-1 block text-xs font-medium text-[var(--color-fg-muted)]"
+                  >
+                    Tittel
+                  </span>
+                  <input
+                    class="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-2.5 py-1.5 text-sm disabled:opacity-50"
+                    placeholder="Høymesse"
+                    value=""
+                  />
+                </label>
+                <label
+                  class="block"
+                >
+                  <span
+                    class="mb-1 block text-xs font-medium text-[var(--color-fg-muted)]"
+                  >
+                    Menighet
+                  </span>
+                  <input
+                    class="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-2.5 py-1.5 text-sm disabled:opacity-50"
+                    placeholder="Vår Frelsers menighet"
+                    value=""
+                  />
+                </label>
+                <label
+                  class="block"
+                >
+                  <span
+                    class="mb-1 block text-xs font-medium text-[var(--color-fg-muted)]"
+                  >
+                    Dato
+                  </span>
+                  <input
+                    class="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-2.5 py-1.5 text-sm disabled:opacity-50"
+                    placeholder="1. juni 2026"
+                    value=""
+                  />
+                </label>
+              </div>
+            </div>
+            <div
+              class="space-y-2.5"
+            >
+              <div
+                class="flex items-center justify-between"
+              >
+                <h3
+                  class="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]"
+                >
+                  Programposter (
+                  1
+                  )
+                </h3>
+                <button
+                  class="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] px-2.5 py-1 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)] disabled:opacity-50"
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    class="lucide lucide-plus"
+                    fill="none"
+                    height="12"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="12"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M5 12h14"
+                    />
+                    <path
+                      d="M12 5v14"
+                    />
+                  </svg>
+                  Legg til post
+                </button>
+              </div>
+              <div
+                class="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] p-3"
+              >
+                <div
+                  class="flex items-center gap-2"
+                >
+                  <span
+                    class="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-[color-mix(in_oklch,var(--color-accent)_12%,transparent)] text-xs font-bold text-[var(--color-accent)]"
+                  >
+                    1
+                  </span>
+                  <select
+                    aria-label="Posttype for post 1"
+                    class="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-2 py-1 text-xs font-medium disabled:opacity-50"
+                  >
+                    <option
+                      value="welcome"
+                    >
+                      Velkomst
+                    </option>
+                    <option
+                      value="song"
+                    >
+                      Sang
+                    </option>
+                    <option
+                      value="scripture"
+                    >
+                      Skriftlesning
+                    </option>
+                    <option
+                      value="sermon"
+                    >
+                      Preken
+                    </option>
+                    <option
+                      value="liturgy"
+                    >
+                      Liturgi
+                    </option>
+                    <option
+                      value="creed"
+                    >
+                      Trosbekjennelse
+                    </option>
+                    <option
+                      value="prayer"
+                    >
+                      Bønn
+                    </option>
+                    <option
+                      value="communion"
+                    >
+                      Nattverd
+                    </option>
+                    <option
+                      value="music"
+                    >
+                      Musikk
+                    </option>
+                    <option
+                      value="announcement"
+                    >
+                      Kunngjøring
+                    </option>
+                    <option
+                      value="offering"
+                    >
+                      Offer
+                    </option>
+                    <option
+                      value="benediction"
+                    >
+                      Velsignelse
+                    </option>
+                  </select>
+                  <input
+                    aria-label="Tittel for post 1"
+                    class="flex-1 rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-2.5 py-1 text-sm disabled:opacity-50"
+                    placeholder="Tittel"
+                    value=""
+                  />
+                  <button
+                    aria-label="Fjern post 1"
+                    class="flex shrink-0 items-center justify-center rounded-md p-1.5 text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-bg-elevated)] hover:text-[var(--color-danger)] disabled:opacity-50"
+                    type="button"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      class="lucide lucide-trash2 lucide-trash-2"
+                      fill="none"
+                      height="14"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      viewBox="0 0 24 24"
+                      width="14"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M10 11v6"
+                      />
+                      <path
+                        d="M14 11v6"
+                      />
+                      <path
+                        d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"
+                      />
+                      <path
+                        d="M3 6h18"
+                      />
+                      <path
+                        d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                      />
+                    </svg>
+                  </button>
+                </div>
+                <textarea
+                  aria-label="Tekst for post 1"
+                  class="mt-2 w-full resize-y rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-2.5 py-1.5 text-sm disabled:opacity-50"
+                  placeholder="Tekst (valgfritt) — lesning, kunngjøring, liturgi …"
+                  rows="2"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+        <section
+          class="space-y-2"
+        >
+          <h2
+            class="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]"
+          >
+            3 · Bygg program
+          </h2>
+          <button
+            class="flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition-all bg-[var(--color-accent)] text-[var(--color-accent-fg)] shadow-sm hover:brightness-110 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+            disabled=""
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-file-plus-corner"
+              fill="none"
+              height="16"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="16"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M11.35 22H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v5.35"
+              />
+              <path
+                d="M14 2v5a1 1 0 0 0 1 1h5"
+              />
+              <path
+                d="M14 19h6"
+              />
+              <path
+                d="M17 16v6"
+              />
+            </svg>
+            Generer dokument
+          </button>
+        </section>
+      </div>
+    </div>
+    <div
+      class="min-w-0 flex-1 p-6"
+    >
+      <div
+        class="grid h-full place-items-center rounded-xl border border-dashed border-[var(--color-border)]"
+      >
+        <div
+          class="max-w-xs text-center"
+        >
+          <svg
+            aria-hidden="true"
+            class="lucide lucide-sparkles mx-auto mb-3 text-[var(--color-fg-muted)] opacity-40"
+            fill="none"
+            height="40"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+            width="40"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+            />
+            <path
+              d="M20 2v4"
+            />
+            <path
+              d="M22 4h-4"
+            />
+            <circle
+              cx="4"
+              cy="20"
+              r="2"
+            />
+          </svg>
+          <p
+            class="text-sm text-[var(--color-fg-muted)]"
+          >
+            Bygg et dokument fra planen for å se forhåndsvisningen her.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+`;
