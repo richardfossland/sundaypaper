@@ -70,6 +70,7 @@ pub fn run() {
             commands::block::block_delete,
             commands::bulletin::bulletin_generate,
             commands::bulletin::bulletin_render,
+            commands::bulletin::typst_compile,
             commands::asset::asset_create,
             commands::asset::asset_get,
             commands::asset::asset_list,

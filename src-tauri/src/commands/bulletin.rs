@@ -13,6 +13,7 @@ use crate::error::AppResult;
 use crate::services::block::{Block, BlockRepo};
 use crate::services::bulletin::{build_bulletin, ServicePlan};
 use crate::services::document::{Document, DocumentRepo};
+use crate::services::layout::engine;
 use crate::services::layout::markup::{build_typst_document, LayoutMeta, RenderBlock};
 use crate::AppState;
 
@@ -101,6 +102,48 @@ pub async fn bulletin_render(
     });
 
     Ok(build_typst_document(&meta, &blocks))
+}
+
+/// Compile Typst source to a PDF — the final FORWARD-pipeline step.
+///
+/// Takes the source string `bulletin_render` produces (or any Typst markup) and
+/// returns the rendered PDF as a base64 string (no data-URL prefix), mirroring
+/// `pdf_render_page`, so the renderer can drop it into a download or an
+/// `<embed src="data:application/pdf;base64,...">`.
+///
+/// Compilation happens in-process via the embedded Typst compiler behind the
+/// `typst` cargo feature; a build without it returns a `feature_disabled` error,
+/// and invalid source returns a `pdf` error carrying Typst's own diagnostic.
+#[tauri::command]
+pub async fn typst_compile(_state: State<'_, AppState>, source: String) -> AppResult<String> {
+    let bytes = engine::compile(&source)?;
+    Ok(base64_encode(&bytes))
+}
+
+/// Minimal standard-base64 encoder (no deps) for PDF bytes — same routine as
+/// `commands::pdf`, kept local so the two command modules stay independent.
+fn base64_encode(input: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+    for chunk in input.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = *chunk.get(1).unwrap_or(&0) as u32;
+        let b2 = *chunk.get(2).unwrap_or(&0) as u32;
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(TABLE[(n >> 18 & 0x3F) as usize] as char);
+        out.push(TABLE[(n >> 12 & 0x3F) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            TABLE[(n >> 6 & 0x3F) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            TABLE[(n & 0x3F) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
 }
 
 /// Rebuild the ordered block tree from a flat, position-sorted block list.
@@ -460,6 +503,18 @@ mod tests {
         let p = src.find("#bp-heading([Section])").unwrap();
         let c = src.find("#par[child line]").unwrap();
         assert!(p < c);
+    }
+
+    #[test]
+    fn base64_matches_known_vectors() {
+        // The encoder feeding `typst_compile` — same RFC 4648 vectors the pdf
+        // command checks, so the two copies can't silently diverge.
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"f"), "Zg==");
+        assert_eq!(base64_encode(b"fo"), "Zm8=");
+        assert_eq!(base64_encode(b"foo"), "Zm9v");
+        assert_eq!(base64_encode(b"foob"), "Zm9vYg==");
+        assert_eq!(base64_encode(b"foobar"), "Zm9vYmFy");
     }
 
     #[test]

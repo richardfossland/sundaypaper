@@ -48,6 +48,16 @@ lopdf = { version = "0.40.0", optional = true }
 pdfium-render = { version = "0.9.1", optional = true, features = ["image_025"] }
 image = { version = "0.25.10", default-features = false, features = ["png"], optional = true }
 
+# Layout compilation (Phase 4.2), behind the `typst` feature — see [features]
+# below. `typst` is the embedded compiler + standard library; `typst-pdf`
+# exports the laid-out document to PDF bytes; `typst-assets` supplies a small
+# set of embedded fonts so compilation needs no system fonts or external files.
+# The pure source-string builder (`layout::markup`) is always compiled; only the
+# in-memory compile step lives here.
+typst = { version = "0.14", optional = true }
+typst-pdf = { version = "0.14", optional = true }
+typst-assets = { version = "0.14", features = ["fonts"], optional = true }
+
 [dev-dependencies]
 tempfile = "3"
 
@@ -58,6 +68,13 @@ default = []
 # planning logic (page-range parsing, split planning, rotation) is always built
 # and unit-tested. Enable with `cargo test --features pdf`.
 pdf = ["dep:lopdf", "dep:pdfium-render", "dep:image"]
+# Typst compilation (Phase 4.2) — the final FORWARD-pipeline step that turns the
+# generated Typst source (always-on `layout::markup`) into PDF bytes. The
+# default build compiles without it and `layout::engine::compile` returns a
+# clear `feature_disabled` error; the embedded compiler + bundled fonts mean the
+# enabled path needs no system fonts or files. Enable with
+# `cargo test --features typst`.
+typst = ["dep:typst", "dep:typst-pdf", "dep:typst-assets"]
 # Later phases add more optional native deps behind features:
 #   ai  = ["dep:reqwest"]   # Anthropic client (Phase 5)
 #   ocr = ["dep:leptess"]   # Tesseract OCR (Phase 3.1)
