@@ -9,6 +9,7 @@ import { AssetsPanel } from "@/features/assets/AssetsPanel";
 import { SangbokPanel } from "@/features/sangbok/SangbokPanel";
 import { BuilderPage } from "@/features/builder/BuilderPage";
 import { EditorPage } from "@/features/editor/EditorPage";
+import { SettingsPage } from "@/features/settings/SettingsPage";
 
 function App() {
   const [route, setRoute] = useState<Route>("dashboard");
@@ -34,6 +35,8 @@ function App() {
           <EditorPage />
         ) : route === "splitter" ? (
           <SangbokPanel />
+        ) : route === "settings" ? (
+          <SettingsPage />
         ) : (
           <Placeholder route={route} />
         )}

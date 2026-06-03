@@ -118,6 +118,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn full_roundtrip_get_set_list_delete() {
+        // Mirrors the Settings-page flow: read (empty) → set a couple keys →
+        // list them back ordered → delete → confirm gone.
+        let repo = repo().await;
+        assert!(repo.get("locale").await.unwrap().is_none());
+
+        repo.set("locale", "no").await.unwrap();
+        let saved = repo.set("anthropic_api_key", "sk-ant-x").await.unwrap();
+        assert_eq!(saved.value, "sk-ant-x");
+
+        // Read-back via get.
+        assert_eq!(repo.get("locale").await.unwrap().as_deref(), Some("no"));
+
+        // list() is ordered by key ascending.
+        let all = repo.list().await.unwrap();
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].key, "anthropic_api_key");
+        assert_eq!(all[1].key, "locale");
+
+        // Deleting one leaves the other intact.
+        repo.delete("anthropic_api_key").await.unwrap();
+        assert!(repo.get("anthropic_api_key").await.unwrap().is_none());
+        assert_eq!(repo.list().await.unwrap().len(), 1);
+    }
+
+    #[tokio::test]
     async fn set_requires_key() {
         let repo = repo().await;
         assert!(matches!(
