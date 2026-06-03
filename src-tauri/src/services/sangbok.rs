@@ -265,6 +265,52 @@ impl SangbokRepo {
         self.get(id).await
     }
 
+    // ── Process from page text (OCR-free core) ────────────────────────────────
+
+    /// Segment a job from already-extracted per-page text and persist the
+    /// resulting song boundaries as `SongExtract` rows, then mark the job
+    /// `Done`. This is the OCR-free core the real worker calls once Tesseract
+    /// (behind the `ocr` feature) has turned the PDF's pages into `pages`; it
+    /// reads no files itself, so it is fully offline-testable. The boundary
+    /// logic lives in the pure [`segment_songs`].
+    pub async fn process_pages(&self, id: &str, pages: &[String]) -> AppResult<SangbokJob> {
+        let job = self.get(id).await?;
+        if SangbokJobStatus::parse(&job.status)?.is_terminal() {
+            return Err(AppError::Validation(format!(
+                "sangbok_job {id} cannot be processed from terminal state '{}'",
+                job.status
+            )));
+        }
+
+        // Advance to Processing and record the page count we were handed.
+        self.set_status(id, &SangbokJobStatus::Processing, None, Some(pages.len()))
+            .await?;
+
+        let boundaries = segment_songs(pages);
+        for (position, b) in boundaries.iter().enumerate() {
+            // Prefer the parsed number as the title hint when no title text was
+            // recovered, so a bare numbered page is still identifiable.
+            let title_hint = if b.title_hint.is_empty() {
+                b.number.map(|n| n.to_string()).unwrap_or_default()
+            } else {
+                b.title_hint.clone()
+            };
+            self.add_extract(
+                id,
+                b.page_start,
+                b.page_end,
+                &title_hint,
+                b.confidence,
+                position as i64,
+            )
+            .await?;
+        }
+
+        let detail = format!("segmented {} song(s)", boundaries.len());
+        self.set_status(id, &SangbokJobStatus::Done, Some(&detail), None)
+            .await
+    }
+
     // ── Advance status (internal, used in tests) ──────────────────────────────
 
     /// Directly set a job's status and optional detail. Used in tests and by
@@ -398,6 +444,188 @@ fn row_to_extract(row: SongExtractRow) -> SongExtract {
         confidence: row.confidence as f32,
         position: row.position,
     }
+}
+
+// ── Song-boundary segmentation (pure, OCR-free) ─────────────────────────────────
+
+/// A song boundary the segmenter found within a run of OCR'd page texts. This is
+/// the pure result of [`segment_songs`] — it carries the range and a best-guess
+/// title/number but no DB identity, so it can be unit-tested without Tesseract,
+/// a PDF, or a database. The persistence layer turns each one into a
+/// [`SongExtract`] row.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SongBoundary {
+    /// First page (0-indexed) belonging to this song.
+    pub page_start: usize,
+    /// Last page (inclusive) belonging to this song.
+    pub page_end: usize,
+    /// Best-guess title from the page's first lines (empty if none detected).
+    pub title_hint: String,
+    /// Hymnal / songbook number parsed off the title line, if present
+    /// (e.g. `97` from `N13 097`).
+    pub number: Option<u32>,
+    /// Heuristic confidence ∈ [0.0, 1.0] that this is a real song boundary.
+    pub confidence: f32,
+}
+
+/// Split a sequence of per-page OCR texts into song boundaries — the pure,
+/// hardware-free heart of the Sangbok-klipper. The OCR step (Tesseract) is
+/// gated behind the `ocr` feature and produces the `pages` slice; this function
+/// turns that text into ranges and needs no native libraries.
+///
+/// Heuristic: a page **starts a new song** when its first non-blank line looks
+/// like a song header. Two signals, each justified by how hymnals are laid out:
+///
+/// 1. A leading hymnal number — a short token of digits, optionally prefixed by
+///    a book code like `N13` (e.g. `N13 097`, `97.`, `# 123`). High confidence.
+/// 2. A short Title-Case line (a handful of words, most capitalised) with the
+///    rest of the page below it. Medium confidence.
+///
+/// Pages that match neither are treated as continuation pages of the song in
+/// progress (a long hymn spilling onto the next page). If the very first page
+/// has no detectable header, a single low-confidence fallback boundary spanning
+/// the whole document is returned so the splitter still yields something usable.
+pub fn segment_songs(pages: &[String]) -> Vec<SongBoundary> {
+    let mut boundaries: Vec<SongBoundary> = Vec::new();
+
+    for (idx, page) in pages.iter().enumerate() {
+        match detect_header(page) {
+            Some((title_hint, number, confidence)) => {
+                // Close the previous boundary at the page before this one.
+                if let Some(prev) = boundaries.last_mut() {
+                    prev.page_end = idx.saturating_sub(1);
+                }
+                boundaries.push(SongBoundary {
+                    page_start: idx,
+                    page_end: idx,
+                    title_hint,
+                    number,
+                    confidence,
+                });
+            }
+            None => {
+                // Continuation page: extend the current song, or — only when the
+                // document opened with no header at all — seed a low-confidence
+                // fallback that the following pages keep extending.
+                match boundaries.last_mut() {
+                    Some(cur) => cur.page_end = idx,
+                    None => boundaries.push(SongBoundary {
+                        page_start: idx,
+                        page_end: idx,
+                        title_hint: String::new(),
+                        number: None,
+                        confidence: 0.2,
+                    }),
+                }
+            }
+        }
+    }
+
+    boundaries
+}
+
+/// Inspect a page's first non-blank line for a song header. Returns
+/// `(title_hint, number, confidence)` when it looks like the start of a song.
+fn detect_header(page: &str) -> Option<(String, Option<u32>, f32)> {
+    let line = page.lines().map(str::trim).find(|l| !l.is_empty())?;
+
+    // Signal 1: a leading hymnal number, optionally with a book-code prefix.
+    if let Some((number, rest)) = parse_leading_number(line) {
+        // The remainder of the line (after the number) is the title, if any.
+        let title_hint = if rest.is_empty() {
+            line.to_string()
+        } else {
+            rest.to_string()
+        };
+        return Some((title_hint, Some(number), 0.9));
+    }
+
+    // Signal 2: a short, mostly Title-Case line reads like a song title.
+    if looks_like_title(line) {
+        return Some((line.to_string(), None, 0.6));
+    }
+
+    None
+}
+
+/// Parse a leading hymnal number off a header line, returning the number and the
+/// trailing title text. Accepts an optional book-code prefix (a letter followed
+/// by digits, e.g. `N13`) before the song number, and an optional trailing
+/// punctuation (`.`/`)`). Examples: `N13 097 Holy Night` → `(97, "Holy Night")`,
+/// `97. Amazing Grace` → `(97, "Amazing Grace")`.
+fn parse_leading_number(line: &str) -> Option<(u32, String)> {
+    let mut tokens = line.split_whitespace();
+    let first = tokens.next()?;
+
+    // Optional `#` marker token on its own (e.g. "# 123").
+    let (first, rest_tokens): (&str, Vec<&str>) = if first == "#" {
+        (tokens.next()?, tokens.collect())
+    } else {
+        (first, tokens.collect())
+    };
+
+    // A leading book code like `N13` is a single uppercase letter + digits; if
+    // present, the real song number is the next token.
+    let (num_token, title_tokens): (&str, &[&str]) =
+        if is_book_code(first) && !rest_tokens.is_empty() {
+            (rest_tokens[0], &rest_tokens[1..])
+        } else {
+            (first, &rest_tokens[..])
+        };
+
+    let digits: String = num_token
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
+    if digits.is_empty() {
+        return None;
+    }
+    // Guard against absurdly long "numbers" (likely OCR noise, not a hymn no.).
+    if digits.len() > 4 {
+        return None;
+    }
+    let number: u32 = digits.parse().ok()?;
+    Some((number, title_tokens.join(" ").trim().to_string()))
+}
+
+/// A book code is a short run of letters followed by digits (e.g. `N13`, `S97`).
+fn is_book_code(tok: &str) -> bool {
+    let mut chars = tok.chars();
+    let mut saw_letter = false;
+    let mut saw_digit = false;
+    for c in chars.by_ref() {
+        if c.is_ascii_alphabetic() && !saw_digit {
+            saw_letter = true;
+        } else if c.is_ascii_digit() {
+            saw_digit = true;
+        } else {
+            return false;
+        }
+    }
+    saw_letter && saw_digit
+}
+
+/// Heuristic: a line reads like a song title when it is short (≤ 8 words) and
+/// most of its alphabetic words are capitalised — the way hymnal titles are set.
+fn looks_like_title(line: &str) -> bool {
+    let words: Vec<&str> = line.split_whitespace().collect();
+    if words.is_empty() || words.len() > 8 {
+        return false;
+    }
+    let alpha_words: Vec<&str> = words
+        .iter()
+        .copied()
+        .filter(|w| w.chars().next().map(|c| c.is_alphabetic()).unwrap_or(false))
+        .collect();
+    if alpha_words.is_empty() {
+        return false;
+    }
+    let capitalised = alpha_words
+        .iter()
+        .filter(|w| w.chars().next().map(|c| c.is_uppercase()).unwrap_or(false))
+        .count();
+    // At least two-thirds of the words start with a capital.
+    capitalised * 3 >= alpha_words.len() * 2
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -579,6 +807,135 @@ mod tests {
         assert_eq!(fetched.songs_found[0].title_hint, "Amazing Grace");
         assert!((fetched.songs_found[0].confidence - 0.92).abs() < 0.01);
         assert_eq!(fetched.songs_found[1].title_hint, "Holy, Holy, Holy");
+    }
+
+    // ── Song-boundary segmentation (pure) ──────────────────────────────────────
+
+    fn pages(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn segments_three_numbered_songs_into_three_ranges() {
+        let p = pages(&[
+            "N13 097 Holy, Holy, Holy\nHoly, holy, holy! Lord God Almighty",
+            "...continuation of holy holy holy...",
+            "N13 098 Amazing Grace\nAmazing grace, how sweet the sound",
+            "N13 099 Be Thou My Vision\nBe thou my vision",
+        ]);
+        let songs = segment_songs(&p);
+        assert_eq!(songs.len(), 3);
+        // First song spans its header page + the continuation page.
+        assert_eq!((songs[0].page_start, songs[0].page_end), (0, 1));
+        assert_eq!(songs[0].number, Some(97));
+        assert_eq!(songs[0].title_hint, "Holy, Holy, Holy");
+        assert_eq!((songs[1].page_start, songs[1].page_end), (2, 2));
+        assert_eq!(songs[1].number, Some(98));
+        assert_eq!((songs[2].page_start, songs[2].page_end), (3, 3));
+        assert_eq!(songs[2].number, Some(99));
+        assert!(
+            songs[0].confidence > 0.8,
+            "numbered header → high confidence"
+        );
+    }
+
+    #[test]
+    fn parses_number_off_various_header_formats() {
+        // Trailing punctuation, hash marker, plain number, book code.
+        assert_eq!(
+            parse_leading_number("97. Amazing Grace"),
+            Some((97, "Amazing Grace".to_string()))
+        );
+        assert_eq!(
+            parse_leading_number("# 123 To God Be the Glory"),
+            Some((123, "To God Be the Glory".to_string()))
+        );
+        assert_eq!(
+            parse_leading_number("N13 097 Holy Night"),
+            Some((97, "Holy Night".to_string()))
+        );
+        // No leading number → None.
+        assert_eq!(parse_leading_number("Just A Title"), None);
+        // Absurdly long digit run is rejected as OCR noise.
+        assert_eq!(parse_leading_number("123456 noise"), None);
+    }
+
+    #[test]
+    fn title_case_line_is_a_medium_confidence_boundary() {
+        let p = pages(&[
+            "Amazing Grace\nAmazing grace, how sweet the sound\nthat saved a wretch like me",
+            "Be Thou My Vision\nBe thou my vision, O Lord of my heart",
+        ]);
+        let songs = segment_songs(&p);
+        assert_eq!(songs.len(), 2);
+        assert_eq!(songs[0].title_hint, "Amazing Grace");
+        assert_eq!(songs[0].number, None);
+        assert!(
+            (songs[0].confidence - 0.6).abs() < 0.001,
+            "title-only → medium"
+        );
+    }
+
+    #[test]
+    fn document_with_no_detectable_header_yields_low_confidence_fallback() {
+        // Lowercase body text with no title-looking lines anywhere.
+        let p = pages(&[
+            "amazing grace, how sweet the sound that saved a wretch like me",
+            "i once was lost but now am found, was blind but now i see",
+        ]);
+        let songs = segment_songs(&p);
+        assert_eq!(songs.len(), 1, "single fallback boundary");
+        assert_eq!((songs[0].page_start, songs[0].page_end), (0, 1));
+        assert!(songs[0].title_hint.is_empty());
+        assert!(songs[0].confidence < 0.3, "fallback is low confidence");
+    }
+
+    #[test]
+    fn empty_input_yields_no_boundaries() {
+        assert!(segment_songs(&[]).is_empty());
+    }
+
+    #[test]
+    fn blank_first_line_is_skipped_when_detecting_header() {
+        let p = pages(&["\n\n  97 Amazing Grace\nbody"]);
+        let songs = segment_songs(&p);
+        assert_eq!(songs.len(), 1);
+        assert_eq!(songs[0].number, Some(97));
+        assert_eq!(songs[0].title_hint, "Amazing Grace");
+    }
+
+    #[tokio::test]
+    async fn process_pages_persists_segmented_extracts() {
+        let repo = repo().await;
+        let job = repo.import("/hymnal.pdf").await.unwrap();
+        let p = pages(&[
+            "97 Amazing Grace\nAmazing grace",
+            "98 Be Thou My Vision\nBe thou my vision",
+        ]);
+        let done = repo.process_pages(&job.id, &p).await.unwrap();
+        assert_eq!(done.status, "Done");
+        assert_eq!(done.page_count, 2);
+        assert_eq!(done.songs_found.len(), 2);
+        assert_eq!(done.songs_found[0].title_hint, "Amazing Grace");
+        assert_eq!(done.songs_found[1].title_hint, "Be Thou My Vision");
+        assert!(done
+            .error_detail
+            .as_deref()
+            .unwrap_or("")
+            .contains("segmented 2"));
+    }
+
+    #[tokio::test]
+    async fn process_pages_on_terminal_job_is_error() {
+        let repo = repo().await;
+        let job = repo.import("/x.pdf").await.unwrap();
+        repo.set_status(&job.id, &SangbokJobStatus::Done, None, None)
+            .await
+            .unwrap();
+        assert!(matches!(
+            repo.process_pages(&job.id, &[]).await.unwrap_err(),
+            AppError::Validation(_)
+        ));
     }
 
     #[tokio::test]
