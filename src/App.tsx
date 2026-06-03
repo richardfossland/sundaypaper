@@ -9,6 +9,7 @@ import { AssetsPanel } from "@/features/assets/AssetsPanel";
 import { SangbokPanel } from "@/features/sangbok/SangbokPanel";
 import { BuilderPage } from "@/features/builder/BuilderPage";
 import { EditorPage } from "@/features/editor/EditorPage";
+import { FormsPage } from "@/features/forms/FormsPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 
 function App() {
@@ -33,6 +34,8 @@ function App() {
           <BuilderPage />
         ) : route === "editor" ? (
           <EditorPage />
+        ) : route === "forms" ? (
+          <FormsPage />
         ) : route === "splitter" ? (
           <SangbokPanel />
         ) : route === "settings" ? (

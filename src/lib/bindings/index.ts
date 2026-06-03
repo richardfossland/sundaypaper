@@ -41,6 +41,9 @@ export type { ScriptureRef } from "./ScriptureRef";
 export type { AssetRef } from "./AssetRef";
 export type { BlockSpec } from "./BlockSpec";
 
+// Fillable form fields (FormBuilder, Phase 7.2 — services/bulletin.rs).
+export type { FormField } from "./FormField";
+
 // Layout engine: block tree → Typst source (services/layout/markup.rs).
 export type { LayoutMeta } from "./LayoutMeta";
 

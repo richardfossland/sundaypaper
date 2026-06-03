@@ -223,6 +223,30 @@ mod enabled {
         }
 
         #[test]
+        fn form_document_compiles_to_a_valid_pdf() {
+            // Phase 7.2: a fillable signup-sheet — heading + the three form-field
+            // kinds — must compile end to end (the FormBuilder → render → compile
+            // chain). The fields render as printed blanks (no interactive AcroForm
+            // widgets: Typst 0.14's PDF backend doesn't emit form fields, so
+            // SundayPaper's forms are filled by hand, which also keeps member data
+            // off the machine's way out — see the privacy promise in CLAUDE.md).
+            let blocks = vec![
+                RenderBlock::leaf(
+                    "heading",
+                    json!({ "role": "service-title", "title": "Volunteer Signup" }),
+                ),
+                RenderBlock::leaf(
+                    "form_field",
+                    json!({ "label": "Full name", "hint": "First & last", "width": "half" }),
+                ),
+                RenderBlock::leaf("form_field", json!({ "label": "E-mail" })),
+                RenderBlock::leaf("checkbox", json!({ "label": "I can serve on Sundays" })),
+                RenderBlock::leaf("signature", json!({ "label": "Signature & date" })),
+            ];
+            assert_is_pdf(&compile_blocks(&blocks));
+        }
+
+        #[test]
         fn invalid_typst_syntax_returns_a_helpful_compile_error() {
             // `#let` with no binding is a parse error; the message should name it
             // rather than panic or yield bytes.

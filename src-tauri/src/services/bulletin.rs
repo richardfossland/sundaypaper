@@ -214,6 +214,78 @@ impl BlockSpec {
     }
 }
 
+/// The fillable-form block kinds the FormBuilder (Phase 7.2) adds on top of the
+/// program block kinds. Unlike the program kinds these are not derived from a
+/// [`ServicePlan`]; a volunteer composes them by hand (a signup sheet, an
+/// attendance form, a donation card). Each maps to one block kind the layout
+/// engine renders as a *printed* field — a labelled rule or box a person fills
+/// in by hand — so member/form data never has to leave the machine to fill the
+/// document, honouring the privacy promise (see CLAUDE.md).
+///
+/// The variants carry only layout-shaping hints (label, placeholder, width);
+/// the actual answers are never modelled here — they're written on the printed
+/// page. [`FormField::into_spec`] turns a variant into the same `(kind, data)`
+/// [`BlockSpec`] the program generator emits, so forms persist through the very
+/// same `BlockRepo::create` path and render through the same Typst builder.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+#[ts(export, export_to = "../../src/lib/bindings/FormField.ts")]
+pub enum FormField {
+    /// A fillable text line: a label, an optional faint placeholder `hint`, and
+    /// an optional `width` keyword (`full` / `half` / `third` / `quarter`).
+    TextField {
+        label: String,
+        #[serde(default)]
+        hint: Option<String>,
+        #[serde(default)]
+        width: Option<String>,
+    },
+    /// A tick box with a label (opt-ins, attendance, consent lines).
+    CheckBox { label: String },
+    /// A wide rule to sign on, the label printed small beneath it.
+    Signature {
+        #[serde(default)]
+        label: Option<String>,
+        #[serde(default)]
+        width: Option<String>,
+    },
+}
+
+impl FormField {
+    /// The block `kind` string this field renders as — the same dispatch keys
+    /// `layout::markup` matches on (`form_field` / `checkbox` / `signature`).
+    pub fn block_kind(&self) -> &'static str {
+        match self {
+            FormField::TextField { .. } => "form_field",
+            FormField::CheckBox { .. } => "checkbox",
+            FormField::Signature { .. } => "signature",
+        }
+    }
+
+    /// Lower a form field to the canonical `(kind, data)` [`BlockSpec`] the rest
+    /// of the pipeline persists and renders. Blank-but-present strings normalise
+    /// to absent so the printed field stays clean — same `opt` rule the program
+    /// generator uses.
+    pub fn into_spec(self) -> AppResult<BlockSpec> {
+        let kind = self.block_kind();
+        let data = match self {
+            FormField::TextField { label, hint, width } => serde_json::json!({
+                "label": opt(&Some(label)),
+                "hint": opt(&hint),
+                "width": opt(&width),
+            }),
+            FormField::CheckBox { label } => serde_json::json!({
+                "label": opt(&Some(label)),
+            }),
+            FormField::Signature { label, width } => serde_json::json!({
+                "label": opt(&label),
+                "width": opt(&width),
+            }),
+        };
+        BlockSpec::new(kind, data)
+    }
+}
+
 /// Map a canonical [`ServicePlan`] into Paper's document block model: an
 /// ordered list of [`BlockSpec`]s ready to persist as top-level program blocks.
 ///
@@ -950,5 +1022,115 @@ mod tests {
             assert!(!spec.kind.trim().is_empty(), "kind is never blank");
             serde_json::from_str::<serde_json::Value>(&spec.data).expect("data must be valid JSON");
         }
+    }
+
+    // --- form fields (Phase 7.2) ---------------------------------------------
+
+    #[test]
+    fn text_field_lowers_to_form_field_block_with_label_hint_width() {
+        let spec = FormField::TextField {
+            label: "Full name".into(),
+            hint: Some("First & last".into()),
+            width: Some("half".into()),
+        }
+        .into_spec()
+        .unwrap();
+        assert_eq!(spec.kind, "form_field");
+        let d = data(&spec);
+        assert_eq!(d["label"], "Full name");
+        assert_eq!(d["hint"], "First & last");
+        assert_eq!(d["width"], "half");
+    }
+
+    #[test]
+    fn checkbox_lowers_to_checkbox_block_with_label() {
+        let spec = FormField::CheckBox {
+            label: "I consent to be contacted".into(),
+        }
+        .into_spec()
+        .unwrap();
+        assert_eq!(spec.kind, "checkbox");
+        assert_eq!(data(&spec)["label"], "I consent to be contacted");
+    }
+
+    #[test]
+    fn signature_lowers_to_signature_block_label_optional() {
+        let with = FormField::Signature {
+            label: Some("Parent / guardian".into()),
+            width: None,
+        }
+        .into_spec()
+        .unwrap();
+        assert_eq!(with.kind, "signature");
+        assert_eq!(data(&with)["label"], "Parent / guardian");
+
+        // A signature with no label → null label (the renderer supplies a
+        // sensible default), not a crash.
+        let bare = FormField::Signature {
+            label: None,
+            width: None,
+        }
+        .into_spec()
+        .unwrap();
+        assert!(data(&bare)["label"].is_null());
+    }
+
+    #[test]
+    fn form_field_blank_strings_normalise_to_null() {
+        let spec = FormField::TextField {
+            label: "  E-mail  ".into(),
+            hint: Some("   ".into()),
+            width: Some("".into()),
+        }
+        .into_spec()
+        .unwrap();
+        let d = data(&spec);
+        assert_eq!(d["label"], "E-mail", "label is trimmed");
+        assert!(d["hint"].is_null(), "blank hint → null");
+        assert!(d["width"].is_null(), "blank width → null");
+    }
+
+    #[test]
+    fn form_field_block_kind_matches_the_variant() {
+        assert_eq!(
+            FormField::TextField {
+                label: "x".into(),
+                hint: None,
+                width: None
+            }
+            .block_kind(),
+            "form_field"
+        );
+        assert_eq!(
+            FormField::CheckBox { label: "x".into() }.block_kind(),
+            "checkbox"
+        );
+        assert_eq!(
+            FormField::Signature {
+                label: None,
+                width: None
+            }
+            .block_kind(),
+            "signature"
+        );
+    }
+
+    #[test]
+    fn form_field_deserialises_from_tagged_json() {
+        // Mirrors what the FormBuilder UI sends: a tagged union keyed on `kind`.
+        let json = r#"{ "kind": "text_field", "label": "Phone", "width": "third" }"#;
+        let field: FormField = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            field,
+            FormField::TextField {
+                label: "Phone".into(),
+                hint: None,
+                width: Some("third".into()),
+            }
+        );
+        // And it lowers to a valid block spec.
+        let spec = field.into_spec().unwrap();
+        assert_eq!(spec.kind, "form_field");
+        serde_json::from_str::<serde_json::Value>(&spec.data).expect("valid JSON data");
     }
 }

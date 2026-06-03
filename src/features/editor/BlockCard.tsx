@@ -26,6 +26,10 @@ export const BLOCK_KINDS = [
   "scripture",
   "liturgy",
   "announcement",
+  // Fillable form-field kinds (Phase 7.2 — FormBuilder).
+  "form_field",
+  "checkbox",
+  "signature",
 ] as const;
 
 /** Validate a string is parseable JSON; returns an error message or null. */
