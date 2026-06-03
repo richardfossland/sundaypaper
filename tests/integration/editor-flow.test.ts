@@ -69,6 +69,44 @@ describe("editor IPC flow", () => {
     });
   });
 
+  it("reorder threads (id, newPosition) and the render chain picks up the new order", async () => {
+    // A document with two top-level blocks; we move the second to the front.
+    const first = mkBlock({ id: "b-a", kind: "liturgy", position: 0n });
+    const second = mkBlock({ id: "b-b", kind: "song", position: 1n });
+
+    invokeMock
+      // block_reorder → backend renormalised positions, b-b now leads.
+      .mockResolvedValueOnce(mkBlock({ id: "b-b", kind: "song", position: 0n }))
+      // block_list after the reorder reflects the new order.
+      .mockResolvedValueOnce([
+        mkBlock({ id: "b-b", kind: "song", position: 0n }),
+        mkBlock({ id: "b-a", kind: "liturgy", position: 1n }),
+      ])
+      .mockResolvedValueOnce("#set page()\nSong\nLiturgy") // bulletin_render
+      .mockResolvedValueOnce("JVBERi0xLjQK"); // typst_compile
+
+    void first;
+    void second;
+
+    const moved = await ipc.block.reorder("b-b", 0);
+    expect(moved.position).toBe(0n);
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "block_reorder", {
+      id: "b-b",
+      newPosition: 0,
+    });
+
+    // The reordered list drives the render: b-b leads, b-a follows.
+    const ordered = await ipc.block.list("doc-1");
+    expect(ordered.map((b) => b.id)).toEqual(["b-b", "b-a"]);
+
+    const source = await ipc.bulletin.render("doc-1");
+    const pdf = await ipc.bulletin.typstCompile(source);
+    expect(pdf).toBe("JVBERi0xLjQK");
+    expect(invokeMock).toHaveBeenNthCalledWith(4, "typst_compile", {
+      source: "#set page()\nSong\nLiturgy",
+    });
+  });
+
   it("render→compile chain matches the builder (bulletin_render → typst_compile)", async () => {
     invokeMock
       .mockResolvedValueOnce("#set page()\nHei") // bulletin_render

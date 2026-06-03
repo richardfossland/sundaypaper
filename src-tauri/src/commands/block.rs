@@ -49,6 +49,17 @@ pub async fn block_update(
 }
 
 #[tauri::command]
+pub async fn block_reorder(
+    state: State<'_, AppState>,
+    id: String,
+    new_position: i64,
+) -> AppResult<Block> {
+    BlockRepo::new(state.db.clone())
+        .reorder(&id, new_position)
+        .await
+}
+
+#[tauri::command]
 pub async fn block_delete(state: State<'_, AppState>, id: String) -> AppResult<()> {
     BlockRepo::new(state.db.clone()).delete(&id).await
 }

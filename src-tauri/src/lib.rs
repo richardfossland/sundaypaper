@@ -67,6 +67,7 @@ pub fn run() {
             commands::block::block_get,
             commands::block::block_list,
             commands::block::block_update,
+            commands::block::block_reorder,
             commands::block::block_delete,
             commands::bulletin::bulletin_generate,
             commands::bulletin::bulletin_render,

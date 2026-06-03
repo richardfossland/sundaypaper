@@ -120,6 +120,52 @@ impl BlockRepo {
         self.get(id).await
     }
 
+    /// Move a block to `new_position` within its sibling group (same document +
+    /// `parent_id`) and renormalise that group's positions to a dense `0..N`
+    /// range. `new_position` is clamped into `0..=last`, so callers can pass a
+    /// large number to mean "move to the end". The whole reshuffle runs in one
+    /// transaction so siblings never observe a half-applied ordering.
+    pub async fn reorder(&self, id: &str, new_position: i64) -> AppResult<Block> {
+        if new_position < 0 {
+            return Err(AppError::Validation(
+                "block position must not be negative".into(),
+            ));
+        }
+        let block = self.get(id).await?;
+
+        // Siblings in stored order; the moved block is in here too.
+        let siblings = sqlx::query_as::<_, Block>(
+            "SELECT * FROM block WHERE document_id = ? AND parent_id IS ? \
+             ORDER BY position ASC, created_at ASC",
+        )
+        .bind(&block.document_id)
+        .bind(block.parent_id.as_deref())
+        .fetch_all(&self.db.pool)
+        .await?;
+
+        // Build the target order: pull the moved block out, reinsert it at the
+        // clamped index. A single-block group is already in its final place.
+        let mut order: Vec<&Block> = siblings.iter().filter(|b| b.id != id).collect();
+        let target = (new_position as usize).min(order.len());
+        order.insert(target, &block);
+
+        let now = now_ms();
+        let mut tx = self.db.pool.begin().await?;
+        for (idx, sib) in order.iter().enumerate() {
+            let pos = idx as i64;
+            if sib.position != pos {
+                sqlx::query("UPDATE block SET position = ?, updated_at = ? WHERE id = ?")
+                    .bind(pos)
+                    .bind(now)
+                    .bind(&sib.id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+        tx.commit().await?;
+        self.get(id).await
+    }
+
     /// Hard-delete a block and its subtree (via the self-referential cascade).
     pub async fn delete(&self, id: &str) -> AppResult<()> {
         let affected = sqlx::query("DELETE FROM block WHERE id = ?")
@@ -229,5 +275,99 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(b.data, r#"{"text":"hi"}"#);
+    }
+
+    /// Positions of a document's top-level blocks, keyed by id, for assertions.
+    async fn positions(blocks: &BlockRepo, doc: &str) -> Vec<(String, i64)> {
+        blocks
+            .list_by_document(doc)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|b| b.parent_id.is_none())
+            .map(|b| (b.id, b.position))
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn reorder_moves_block_and_renormalises_siblings() {
+        let (blocks, doc) = fixture().await;
+        let a = blocks.create(&doc, None, "liturgy", "").await.unwrap();
+        let b = blocks.create(&doc, None, "song", "").await.unwrap();
+        let c = blocks.create(&doc, None, "scripture", "").await.unwrap();
+        assert_eq!((a.position, b.position, c.position), (0, 1, 2));
+
+        // Move the last block (c) to the front.
+        let moved = blocks.reorder(&c.id, 0).await.unwrap();
+        assert_eq!(moved.position, 0);
+
+        let pos = positions(&blocks, &doc).await;
+        // Dense 0..N with c first, then a, then b.
+        assert_eq!(pos, vec![(c.id, 0), (a.id, 1), (b.id, 2)]);
+    }
+
+    #[tokio::test]
+    async fn reorder_clamps_to_end_when_position_overshoots() {
+        let (blocks, doc) = fixture().await;
+        let a = blocks.create(&doc, None, "liturgy", "").await.unwrap();
+        let b = blocks.create(&doc, None, "song", "").await.unwrap();
+        let c = blocks.create(&doc, None, "scripture", "").await.unwrap();
+
+        // Move the first block far past the end → it lands last, positions dense.
+        blocks.reorder(&a.id, 99).await.unwrap();
+        let pos = positions(&blocks, &doc).await;
+        assert_eq!(pos, vec![(b.id, 0), (c.id, 1), (a.id, 2)]);
+    }
+
+    #[tokio::test]
+    async fn reorder_is_scoped_to_the_sibling_group() {
+        let (blocks, doc) = fixture().await;
+        let root = blocks.create(&doc, None, "liturgy", "").await.unwrap();
+        let other_root = blocks.create(&doc, None, "song", "").await.unwrap();
+        let child0 = blocks
+            .create(&doc, Some(&root.id), "scripture", "")
+            .await
+            .unwrap();
+        let child1 = blocks
+            .create(&doc, Some(&root.id), "image", "")
+            .await
+            .unwrap();
+
+        // Reordering children must not disturb the top-level group.
+        blocks.reorder(&child1.id, 0).await.unwrap();
+
+        let children: Vec<_> = blocks
+            .list_by_document(&doc)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|b| b.parent_id.as_deref() == Some(root.id.as_str()))
+            .map(|b| (b.id, b.position))
+            .collect();
+        assert_eq!(children, vec![(child1.id, 0), (child0.id, 1)]);
+        // Top-level blocks untouched.
+        let top = positions(&blocks, &doc).await;
+        assert_eq!(top, vec![(root.id, 0), (other_root.id, 1)]);
+    }
+
+    #[tokio::test]
+    async fn reorder_rejects_negative_position() {
+        let (blocks, doc) = fixture().await;
+        let a = blocks.create(&doc, None, "liturgy", "").await.unwrap();
+        let err = blocks.reorder(&a.id, -1).await.unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    #[tokio::test]
+    async fn reorder_unknown_block_is_not_found() {
+        let (blocks, _doc) = fixture().await;
+        let err = blocks.reorder("nope", 0).await.unwrap_err();
+        assert!(matches!(
+            err,
+            AppError::NotFound {
+                entity: "block",
+                ..
+            }
+        ));
     }
 }

@@ -119,6 +119,10 @@ export const block = {
   list: (documentId: string) => call<Block[]>("block_list", { documentId }),
   update: (id: string, kind: string, data: string) =>
     call<Block>("block_update", { id, kind, data }),
+  /** Move a block to `newPosition` within its sibling group; positions of the
+   *  affected siblings renormalise to a dense `0..N` range on the backend. */
+  reorder: (id: string, newPosition: number) =>
+    call<Block>("block_reorder", { id, newPosition }),
   delete: (id: string) => call<void>("block_delete", { id }),
 };
 
