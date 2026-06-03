@@ -24,4 +24,16 @@ author: string | null,
 /**
  * Hymnal / songbook number (e.g. "N13 097"), printed next to the title.
  */
-number: string | null, };
+number: string | null, 
+/**
+ * The song's verses, in singing order — one entry per verse (a verse may
+ * itself span several lines). Carried when the plan is bound to the song
+ * catalog so the program prints the actual words, not just the heading.
+ * Empty / absent means a bare reference (heading only), as before.
+ */
+verses: Array<string>, 
+/**
+ * The refrain / chorus, printed once after the first verse. `None` when the
+ * song has no refrain.
+ */
+refrain: string | null, };
