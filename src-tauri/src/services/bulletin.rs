@@ -45,6 +45,16 @@ pub struct SongRef {
     /// Hymnal / songbook number (e.g. "N13 097"), printed next to the title.
     #[serde(default)]
     pub number: Option<String>,
+    /// The song's verses, in singing order — one entry per verse (a verse may
+    /// itself span several lines). Carried when the plan is bound to the song
+    /// catalog so the program prints the actual words, not just the heading.
+    /// Empty / absent means a bare reference (heading only), as before.
+    #[serde(default)]
+    pub verses: Vec<String>,
+    /// The refrain / chorus, printed once after the first verse. `None` when the
+    /// song has no refrain.
+    #[serde(default)]
+    pub refrain: Option<String>,
 }
 
 /// A reference to a scripture passage (e.g. "John 3:16-21").
@@ -361,6 +371,11 @@ fn block_for_item(item: &SetlistItem) -> AppResult<BlockSpec> {
                     "tonoWorkId": opt(&song.tono_work_id),
                     "author": opt(&song.author),
                     "number": opt(&song.number),
+                    // Full lyrics when the plan bound them; the markup builder
+                    // numbers verses and indents the refrain. Blank entries are
+                    // dropped downstream, so an empty list prints nothing.
+                    "verses": song.verses,
+                    "refrain": opt(&song.refrain),
                     // Rights credit the licence may require us to print.
                     "copyright": opt(&item.copyright),
                 }),
@@ -526,6 +541,11 @@ mod tests {
                         tono_work_id: Some("TONO-999".into()),
                         author: Some("Reginald Heber".into()),
                         number: Some("N13 097".into()),
+                        verses: vec![
+                            "Holy, holy, holy! Lord God Almighty!".into(),
+                            "Holy, holy, holy! All the saints adore thee".into(),
+                        ],
+                        refrain: None,
                     }),
                     ..Default::default()
                 },
@@ -678,6 +698,47 @@ mod tests {
         assert_eq!(d["tonoWorkId"], "TONO-999");
         assert_eq!(d["author"], "Reginald Heber");
         assert_eq!(d["number"], "N13 097");
+    }
+
+    #[test]
+    fn song_block_carries_verses_and_refrain() {
+        let plan = ServicePlan {
+            items: vec![SetlistItem {
+                kind: SetlistItemKind::Song,
+                title: Some("Amazing Grace".into()),
+                song: Some(SongRef {
+                    verses: vec!["Amazing grace, how sweet".into(), "'Twas grace".into()],
+                    refrain: Some("Praise be".into()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let d = data(&build_bulletin(&plan).unwrap()[0]);
+        let verses = d["verses"].as_array().expect("verses array carried");
+        assert_eq!(verses.len(), 2);
+        assert_eq!(verses[0], "Amazing grace, how sweet");
+        assert_eq!(d["refrain"], "Praise be");
+    }
+
+    #[test]
+    fn song_block_without_lyrics_carries_empty_verses_and_null_refrain() {
+        let plan = ServicePlan {
+            items: vec![SetlistItem {
+                kind: SetlistItemKind::Song,
+                title: Some("Bare".into()),
+                song: Some(SongRef {
+                    number: Some("N1".into()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let d = data(&build_bulletin(&plan).unwrap()[0]);
+        assert_eq!(d["verses"].as_array().expect("verses present").len(), 0);
+        assert!(d["refrain"].is_null());
     }
 
     #[test]

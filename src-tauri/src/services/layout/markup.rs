@@ -129,6 +129,10 @@ fn preamble(meta: &LayoutMeta) -> String {
          #let bp-heading(t) = [#v(0.5em)#text(size: 1.2em, weight: \"bold\")[#t]#v(0.2em)]\n\
          #let bp-byline(who) = if who != none {{ text(size: 0.85em, style: \"italic\")[#who] }}\n\
          #let bp-time(t) = if t != none {{ box(width: 3em)[#text(fill: gray)[#t]] }}\n\
+         // Lyric helpers: a numbered verse and an indented, italic refrain so a\n\
+         // congregation can follow along. The number is optional (none = unnumbered).\n\
+         #let bp-verse(n, body) = block(below: 0.5em)[#if n != none {{ [#text(weight: \"bold\")[#n.] #h(0.3em)] }}#body]\n\
+         #let bp-refrain(body) = block(below: 0.5em, inset: (left: 1.2em))[#emph[#body]]\n\
          // Form-field helpers. SundayPaper renders forms as printable fields —\n\
          // a labelled rule a person fills in by hand — so member data never has\n\
          // to leave the machine (no cloud round-trip to fill a PDF).\n\
@@ -201,10 +205,13 @@ fn render_heading(d: &serde_json::Value) -> String {
     s
 }
 
-/// `song` — title (+ hymnal number), an optional author byline and an optional
-/// copyright credit printed small under the title. Lyrics aren't carried in the
-/// plan, so the block prints the heading the program needs; the editor binds
-/// full lyrics later.
+/// `song` — title (+ hymnal number), an optional author byline, the song's
+/// verses (numbered) and refrain when the payload carries them, and an optional
+/// copyright credit printed small at the end. Plans bound to the song catalog
+/// can now carry the actual `verses`/`refrain` text, so the program prints the
+/// words the congregation sings — not just the heading. When no lyrics are
+/// supplied (a bare plan reference), only the heading/byline are emitted, as
+/// before, so the FORWARD pipeline degrades gracefully.
 fn render_song(d: &serde_json::Value) -> String {
     let title = field(d, "title").unwrap_or_else(|| "Song".to_string());
     let heading = match field(d, "number") {
@@ -215,6 +222,34 @@ fn render_song(d: &serde_json::Value) -> String {
     if let Some(author) = field(d, "author") {
         s.push_str(&format!("#bp-byline({})\n", content_arg(&Some(author))));
     }
+
+    // Verses + refrain. Each non-blank verse is numbered in document order; the
+    // refrain (if any) is printed once, indented, after the first verse — the
+    // common congregational layout. Every line is escaped, so a lyric line can
+    // never inject Typst markup. A verse can itself span several lines, which
+    // `escape_content` turns into hard line breaks.
+    let verses = string_list(d, "verses");
+    let refrain = field(d, "refrain");
+    for (i, verse) in verses.iter().enumerate() {
+        s.push_str(&format!(
+            "#bp-verse([{}], [{}])\n",
+            i + 1,
+            escape_content(verse)
+        ));
+        // Print the refrain after the first verse only.
+        if i == 0 {
+            if let Some(r) = &refrain {
+                s.push_str(&format!("#bp-refrain([{}])\n", escape_content(r)));
+            }
+        }
+    }
+    // A refrain with no verses at all still gets printed once.
+    if verses.is_empty() {
+        if let Some(r) = &refrain {
+            s.push_str(&format!("#bp-refrain([{}])\n", escape_content(r)));
+        }
+    }
+
     if let Some(c) = field(d, "copyright") {
         s.push_str(&format!(
             "#text(size: 0.75em, fill: gray)[{}]\n",
@@ -366,6 +401,24 @@ fn field(d: &serde_json::Value, key: &str) -> Option<String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
+}
+
+/// Read a string-array field (e.g. a song's `verses`) into a `Vec<String>`,
+/// keeping only non-blank entries (trimmed) and dropping non-string elements.
+/// An absent / non-array value yields an empty vector, so the markup prints
+/// nothing rather than a broken construct.
+fn string_list(d: &serde_json::Value, key: &str) -> Vec<String> {
+    d.get(key)
+        .and_then(serde_json::Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// The `role` discriminator a block may carry (heading/liturgy), defaulting to
@@ -595,6 +648,114 @@ mod tests {
     fn song_without_number_uses_bare_title() {
         let b = RenderBlock::leaf("song", json!({ "title": "Amazing Grace" }));
         assert!(doc(&[b]).contains("#bp-heading([Amazing Grace])"));
+    }
+
+    #[test]
+    fn preamble_defines_lyric_helpers() {
+        let src = build_typst_document(&LayoutMeta::default(), &[]);
+        assert!(src.contains("#let bp-verse"));
+        assert!(src.contains("#let bp-refrain"));
+    }
+
+    #[test]
+    fn song_renders_verses_in_order_with_numbers() {
+        let b = RenderBlock::leaf(
+            "song",
+            json!({
+                "title": "Amazing Grace",
+                "verses": ["Amazing grace, how sweet", "'Twas grace that taught", "Through many dangers"],
+            }),
+        );
+        let src = doc(&[b]);
+        assert!(src.contains("#bp-verse([1], [Amazing grace, how sweet])"));
+        assert!(src.contains("#bp-verse([2], ['Twas grace that taught])"));
+        assert!(src.contains("#bp-verse([3], [Through many dangers])"));
+        // Numbering is sequential in document order.
+        let v1 = src.find("#bp-verse([1]").unwrap();
+        let v2 = src.find("#bp-verse([2]").unwrap();
+        let v3 = src.find("#bp-verse([3]").unwrap();
+        assert!(v1 < v2 && v2 < v3, "verses render in order");
+    }
+
+    #[test]
+    fn song_refrain_prints_once_after_first_verse() {
+        let b = RenderBlock::leaf(
+            "song",
+            json!({
+                "title": "Hymn",
+                "verses": ["Verse one", "Verse two"],
+                "refrain": "Sing the chorus",
+            }),
+        );
+        let src = doc(&[b]);
+        // Exactly one refrain, positioned between verse 1 and verse 2.
+        assert_eq!(
+            src.matches("#bp-refrain(").count(),
+            1,
+            "refrain printed once"
+        );
+        let v1 = src.find("#bp-verse([1]").unwrap();
+        let refrain = src.find("#bp-refrain([Sing the chorus])").unwrap();
+        let v2 = src.find("#bp-verse([2]").unwrap();
+        assert!(v1 < refrain && refrain < v2, "refrain sits after verse 1");
+    }
+
+    #[test]
+    fn song_refrain_without_verses_still_prints() {
+        let b = RenderBlock::leaf(
+            "song",
+            json!({ "title": "Chorus only", "refrain": "Alleluia" }),
+        );
+        let src = doc(&[b]);
+        assert!(src.contains("#bp-refrain([Alleluia])"));
+        assert!(!src.contains("#bp-verse("), "no verses → no verse markup");
+    }
+
+    #[test]
+    fn song_without_lyrics_emits_no_verse_or_refrain() {
+        let b = RenderBlock::leaf("song", json!({ "title": "Bare reference" }));
+        let src = doc(&[b]);
+        assert!(!src.contains("#bp-verse("));
+        assert!(!src.contains("#bp-refrain("));
+        // The heading still renders, as before.
+        assert!(src.contains("#bp-heading([Bare reference])"));
+    }
+
+    #[test]
+    fn song_blank_and_non_string_verses_are_skipped() {
+        let b = RenderBlock::leaf(
+            "song",
+            json!({ "title": "Mixed", "verses": ["Real verse", "   ", null, 42, "Second real"] }),
+        );
+        let src = doc(&[b]);
+        // Only the two real verses survive, renumbered 1 and 2.
+        assert!(src.contains("#bp-verse([1], [Real verse])"));
+        assert!(src.contains("#bp-verse([2], [Second real])"));
+        assert!(!src.contains("#bp-verse([3]"));
+    }
+
+    #[test]
+    fn song_multiline_verse_becomes_hard_breaks() {
+        let b = RenderBlock::leaf(
+            "song",
+            json!({ "title": "T", "verses": ["line one\nline two"] }),
+        );
+        let src = doc(&[b]);
+        // The newline inside the verse is escaped to a hard line break.
+        assert!(src.contains("#bp-verse([1], [line one\\\nline two])"));
+    }
+
+    #[test]
+    fn song_lyric_line_cannot_inject_markup() {
+        // A malicious verse line trying to close the content block and call a fn.
+        let b = RenderBlock::leaf(
+            "song",
+            json!({ "title": "T", "verses": ["x] #panic() [y"], "refrain": "$ # *" }),
+        );
+        let src = doc(&[b]);
+        assert!(src.contains("\\]"), "closing bracket escaped");
+        assert!(src.contains("\\#panic"), "function call neutralised");
+        assert!(!src.contains("[x] #panic"), "raw injection impossible");
     }
 
     #[test]
