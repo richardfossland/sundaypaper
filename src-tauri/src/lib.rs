@@ -93,6 +93,8 @@ pub fn run() {
             commands::import_job::import_job_get,
             commands::import_job::import_job_list,
             commands::import_job::import_job_update_status,
+            commands::import_job::import_job_delete,
+            commands::import_job::import_job_clear_finished,
             commands::setting::setting_get,
             commands::setting::setting_set,
             commands::setting::setting_list,

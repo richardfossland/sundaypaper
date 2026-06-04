@@ -14,24 +14,14 @@
  * an editor on the right. On first load, if the list is empty, we call
  * `seedBuiltins()` once and refetch so a fresh install is not a blank page.
  *
- * Backend asymmetry: `doc_template_create` accepts the full variable list, but
- * `doc_template_update` only updates name/kind/typstSource. So the variable
- * editor is fully editable when composing a NEW template; for an existing one
- * the variables are shown read-only (with a note) and only name/kind/source
- * save. This matches the shipped IPC — no backend changes.
+ * Both create AND update carry the full variable spec: `doc_template_update`
+ * replaces the template's variables atomically (delete + reinsert), so the
+ * variable editor is fully editable for new and existing templates alike.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  FileText,
-  Loader2,
-  Plus,
-  Save,
-  Trash2,
-  X,
-} from "lucide-react";
+import { FileText, Loader2, Plus, Save, Trash2, X } from "lucide-react";
 
 import { ipc, IPCError, errMessage } from "@/lib/ipc";
 import { docTemplatesKey } from "@/lib/queryKeys";
@@ -113,7 +103,13 @@ export function DocTemplatesPanel() {
 
   const update = useMutation({
     mutationFn: ({ id, f }: { id: string; f: DocTemplateFormState }) =>
-      ipc.docTemplate.update(id, f.name.trim(), f.kind, f.typstSource),
+      ipc.docTemplate.update(
+        id,
+        f.name.trim(),
+        f.kind,
+        f.typstSource,
+        formToVariables(f),
+      ),
     onSuccess: invalidate,
   });
 
@@ -360,7 +356,7 @@ export function DocTemplatesPanel() {
                 </p>
               </Field>
 
-              <VariableEditor form={form} editable={isNew} onChange={setForm} />
+              <VariableEditor form={form} onChange={setForm} />
             </div>
 
             {saveError && (
@@ -435,11 +431,9 @@ export function DocTemplatesPanel() {
 
 function VariableEditor({
   form,
-  editable,
   onChange,
 }: {
   form: DocTemplateFormState;
-  editable: boolean;
   onChange: React.Dispatch<React.SetStateAction<DocTemplateFormState>>;
 }) {
   function updateRow(
@@ -469,30 +463,19 @@ function VariableEditor({
         <span className="text-xs font-medium text-[var(--color-fg-muted)]">
           Variabler
         </span>
-        {editable && (
-          <button
-            type="button"
-            onClick={addRow}
-            className="flex items-center gap-1 rounded-md border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
-          >
-            <Plus size={12} />
-            Legg til
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={addRow}
+          className="flex items-center gap-1 rounded-md border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+        >
+          <Plus size={12} />
+          Legg til
+        </button>
       </div>
-
-      {!editable && (
-        <p className="mb-2 flex items-start gap-1.5 text-xs text-[oklch(0.7_0.16_75)]">
-          <AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden />
-          Variabler kan bare settes når malen opprettes. Her vises de
-          skrivebeskyttet.
-        </p>
-      )}
 
       {form.variables.length === 0 ? (
         <p className="rounded-md border border-dashed border-[var(--color-border)] px-3 py-4 text-center text-xs text-[var(--color-fg-muted)]">
-          Ingen variabler.
-          {editable && " Legg til en for å parametrisere malen."}
+          Ingen variabler. Legg til en for å parametrisere malen.
         </p>
       ) : (
         <ul className="space-y-2">
@@ -504,31 +487,25 @@ function VariableEditor({
               <div className="grid grid-cols-2 gap-2">
                 <input
                   value={v.name}
-                  disabled={!editable}
                   onChange={(e) => updateRow(idx, { name: e.target.value })}
                   placeholder="navn (i {{…}})"
                   aria-label={`Variabelnavn ${idx + 1}`}
-                  className={cn(
-                    inputCls,
-                    "font-mono text-[13px] disabled:opacity-60",
-                  )}
+                  className={cn(inputCls, "font-mono text-[13px]")}
                 />
                 <input
                   value={v.label}
-                  disabled={!editable}
                   onChange={(e) => updateRow(idx, { label: e.target.value })}
                   placeholder="etikett"
                   aria-label={`Variabeletikett ${idx + 1}`}
-                  className={cn(inputCls, "disabled:opacity-60")}
+                  className={inputCls}
                 />
               </div>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <select
                   value={v.kind}
-                  disabled={!editable}
                   onChange={(e) => updateRow(idx, { kind: e.target.value })}
                   aria-label={`Variabeltype ${idx + 1}`}
-                  className={cn(inputCls, "disabled:opacity-60")}
+                  className={inputCls}
                 >
                   {VAR_KINDS.map((k) => (
                     <option key={k} value={k}>
@@ -538,13 +515,12 @@ function VariableEditor({
                 </select>
                 <input
                   value={v.defaultValue}
-                  disabled={!editable}
                   onChange={(e) =>
                     updateRow(idx, { defaultValue: e.target.value })
                   }
                   placeholder="standardverdi"
                   aria-label={`Standardverdi ${idx + 1}`}
-                  className={cn(inputCls, "disabled:opacity-60")}
+                  className={inputCls}
                 />
               </div>
               <div className="mt-2 flex items-center justify-between">
@@ -552,23 +528,20 @@ function VariableEditor({
                   <input
                     type="checkbox"
                     checked={v.required}
-                    disabled={!editable}
                     onChange={(e) =>
                       updateRow(idx, { required: e.target.checked })
                     }
                   />
                   Påkrevd
                 </label>
-                {editable && (
-                  <button
-                    type="button"
-                    onClick={() => removeRow(idx)}
-                    aria-label={`Fjern variabel ${idx + 1}`}
-                    className="rounded-md p-1 text-[var(--color-fg-muted)] hover:text-[var(--color-danger)]"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => removeRow(idx)}
+                  aria-label={`Fjern variabel ${idx + 1}`}
+                  className="rounded-md p-1 text-[var(--color-fg-muted)] hover:text-[var(--color-danger)]"
+                >
+                  <Trash2 size={13} />
+                </button>
               </div>
             </li>
           ))}

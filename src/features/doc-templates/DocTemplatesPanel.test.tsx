@@ -170,7 +170,7 @@ describe("DocTemplatesPanel", () => {
     expect(screen.getByRole("button", { name: "Lagre" })).toBeDisabled();
   });
 
-  it("edits an existing template via ipc.docTemplate.update (name/kind/source only)", async () => {
+  it("edits an existing template via ipc.docTemplate.update, carrying its variables", async () => {
     renderPanel();
     fireEvent.click(await screen.findByText("Høymesse"));
 
@@ -184,18 +184,46 @@ describe("DocTemplatesPanel", () => {
         "Høymesse (rev)",
         "Bulletin",
         expect.any(String),
+        // The existing `title` variable round-trips back through update.
+        [
+          expect.objectContaining({
+            name: "title",
+            label: "Tittel",
+            kind: "Text",
+            required: true,
+          }),
+        ],
       ),
     );
   });
 
-  it("shows existing variables read-only when editing", async () => {
+  it("lets you edit variables on an existing template (no read-only restriction)", async () => {
     renderPanel();
     fireEvent.click(await screen.findByText("Høymesse"));
-    // Variable name input is present but disabled for an existing template.
-    expect(screen.getByLabelText("Variabelnavn 1")).toBeDisabled();
+
+    // The existing variable's name input is now editable.
+    const nameInput = screen.getByLabelText("Variabelnavn 1");
+    expect(nameInput).not.toBeDisabled();
+    fireEvent.change(nameInput, { target: { value: "heading" } });
+
+    // The old read-only notice is gone, and "Legg til" is available.
     expect(
-      screen.getByText(/Variabler kan bare settes når malen opprettes/),
+      screen.queryByText(/Variabler kan bare settes når malen opprettes/),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Legg til" }),
     ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Lagre" }));
+    await waitFor(() =>
+      expect(ipcMock.docTemplate.update).toHaveBeenCalledWith(
+        "t-hoymesse",
+        "Høymesse",
+        "Bulletin",
+        expect.any(String),
+        [expect.objectContaining({ name: "heading" })],
+      ),
+    );
   });
 
   it("deletes only after the confirm step", async () => {

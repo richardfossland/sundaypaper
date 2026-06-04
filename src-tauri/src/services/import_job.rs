@@ -103,6 +103,36 @@ impl ImportJobRepo {
         Ok(rows)
     }
 
+    /// Permanently delete a single job by id. The import-job table is a job log
+    /// with no soft-delete, so this is a hard `DELETE`. Returns `NotFound` if no
+    /// row matched, mirroring `get`'s contract.
+    pub async fn delete(&self, id: &str) -> AppResult<()> {
+        let affected = sqlx::query("DELETE FROM import_job WHERE id = ?")
+            .bind(id)
+            .execute(&self.db.pool)
+            .await?
+            .rows_affected();
+        if affected == 0 {
+            return Err(AppError::NotFound {
+                entity: "import_job",
+                id: id.to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Delete every job in a terminal state (`done` / `error`), keeping the
+    /// in-flight (`pending` / `running`) ones. Returns how many rows were
+    /// removed so the UI can report it. Clearing an empty/all-active log is a
+    /// no-op that returns 0.
+    pub async fn clear_finished(&self) -> AppResult<u64> {
+        let affected = sqlx::query("DELETE FROM import_job WHERE status IN ('done', 'error')")
+            .execute(&self.db.pool)
+            .await?
+            .rows_affected();
+        Ok(affected)
+    }
+
     /// Advance a job's status and optional detail. Rejects unknown statuses.
     pub async fn update_status(
         &self,
@@ -242,6 +272,67 @@ mod tests {
             .map(|j| j.id)
             .collect();
         assert_eq!(ids, vec![b.id, a.id]);
+    }
+
+    #[tokio::test]
+    async fn delete_removes_the_row() {
+        let repo = repo().await;
+        let job = repo.create(None, "/in/scan.pdf", "ocr").await.unwrap();
+        repo.delete(&job.id).await.unwrap();
+        // The row is gone: get is NotFound and the list is empty.
+        assert!(matches!(
+            repo.get(&job.id).await.unwrap_err(),
+            AppError::NotFound { .. }
+        ));
+        assert!(repo.list().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn delete_unknown_id_is_not_found() {
+        let repo = repo().await;
+        assert!(matches!(
+            repo.delete("ghost").await.unwrap_err(),
+            AppError::NotFound { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn clear_finished_removes_only_terminal_jobs() {
+        let repo = repo().await;
+        // One pending, one running (both active), one done, one errored.
+        let pending = repo.create(None, "/p.pdf", "ocr").await.unwrap();
+        let running = repo.create(None, "/r.pdf", "ocr").await.unwrap();
+        repo.update_status(&running.id, "running", None)
+            .await
+            .unwrap();
+        let done = repo.create(None, "/d.pdf", "split").await.unwrap();
+        repo.update_status(&done.id, "done", Some("ok"))
+            .await
+            .unwrap();
+        let errored = repo.create(None, "/e.pdf", "merge").await.unwrap();
+        repo.update_status(&errored.id, "error", Some("boom"))
+            .await
+            .unwrap();
+
+        let removed = repo.clear_finished().await.unwrap();
+        assert_eq!(removed, 2, "only done + error are cleared");
+
+        let remaining: Vec<_> = repo
+            .list()
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|j| j.id)
+            .collect();
+        assert_eq!(remaining.len(), 2);
+        assert!(remaining.contains(&pending.id));
+        assert!(remaining.contains(&running.id));
+    }
+
+    #[tokio::test]
+    async fn clear_finished_on_empty_log_is_zero() {
+        let repo = repo().await;
+        assert_eq!(repo.clear_finished().await.unwrap(), 0);
     }
 
     #[tokio::test]
