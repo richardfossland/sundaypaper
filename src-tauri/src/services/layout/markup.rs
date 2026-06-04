@@ -492,7 +492,11 @@ pub fn escape_content(input: &str) -> String {
         match ch {
             // Backslash first so we don't double-escape what follows.
             '\\' => out.push_str("\\\\"),
-            '#' | '$' | '*' | '_' | '`' | '<' | '>' | '@' | '~' | '[' | ']' | '/' | '=' => {
+            // Structural chars Typst gives meaning to at the start of a line or
+            // inline: `-`/`+` open list items and `--`/`---` become en/em dashes,
+            // so they must be escaped too (see the contract in the doc comment).
+            '#' | '$' | '*' | '_' | '`' | '<' | '>' | '@' | '~' | '[' | ']' | '/' | '=' | '-'
+            | '+' => {
                 out.push('\\');
                 out.push(ch);
             }
@@ -782,8 +786,10 @@ mod tests {
             }),
         );
         let src = doc(&[b]);
-        // No explicit title → the reference becomes the heading.
-        assert!(src.contains("#bp-heading([John 3:16-21 (NRSV)])"));
+        // No explicit title → the reference becomes the heading. The hyphen in
+        // the verse range is escaped (Typst would otherwise treat "16-21" as a
+        // dash conversion / list context).
+        assert!(src.contains("#bp-heading([John 3:16\\-21 (NRSV)])"));
         assert!(src.contains("#quote(block: true)[For God so loved the world.]"));
     }
 
@@ -916,6 +922,18 @@ mod tests {
     }
 
     #[test]
+    fn content_escaping_neutralises_dash_and_plus() {
+        // Typst markup treats a line starting with "- " as a bullet list item and
+        // "+ " as a numbered list item, and collapses "--"/"---" into en/em
+        // dashes. The doc comment promises these structural chars are escaped so
+        // user text prints verbatim — verify they actually are.
+        assert_eq!(escape_content("- so far"), "\\- so far");
+        assert_eq!(escape_content("+ first"), "\\+ first");
+        assert_eq!(escape_content("A--B"), "A\\-\\-B");
+        assert_eq!(escape_content("--- C"), "\\-\\-\\- C");
+    }
+
+    #[test]
     fn content_escaping_handles_newlines_as_hard_breaks() {
         assert_eq!(escape_content("line1\nline2"), "line1\\\nline2");
         // CRLF: the CR is dropped, the LF becomes the break.
@@ -984,7 +1002,8 @@ mod tests {
     fn form_field_without_hint_or_width_uses_none_and_full_width() {
         let b = RenderBlock::leaf("form_field", json!({ "label": "E-mail" }));
         let src = doc(&[b]);
-        assert!(src.contains("#bp-field([E-mail], hint: none, width: 100%)"));
+        // The hyphen in the label is escaped so it prints literally.
+        assert!(src.contains("#bp-field([E\\-mail], hint: none, width: 100%)"));
     }
 
     #[test]
