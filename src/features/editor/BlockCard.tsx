@@ -18,6 +18,7 @@ import { AlertCircle, Save, Trash2 } from "lucide-react";
 import type { Block } from "@/lib/bindings";
 import { cn } from "@/lib/cn";
 import { BLOCK_KINDS, jsonError } from "./block-kinds";
+import { TableEditor } from "./TableEditor";
 
 interface BlockCardProps {
   block: Block;
@@ -87,20 +88,26 @@ export function BlockCard({
         </button>
       </div>
 
-      <textarea
-        aria-label="Blokkdata (JSON)"
-        value={data}
-        onChange={(e) => setData(e.target.value)}
-        disabled={busy}
-        spellCheck={false}
-        rows={3}
-        className={cn(
-          "mt-2 w-full resize-y rounded-md border bg-[var(--color-bg-elevated)] px-2.5 py-1.5 font-mono text-xs",
-          invalid
-            ? "border-[var(--color-danger)]"
-            : "border-[var(--color-border)]",
-        )}
-      />
+      {/* Tables get a structured grid editor; everything else keeps the raw
+          JSON textarea. Both feed the same `data` draft + save flow. */}
+      {kind === "table" ? (
+        <TableEditor data={data} busy={busy} onChange={setData} />
+      ) : (
+        <textarea
+          aria-label="Blokkdata (JSON)"
+          value={data}
+          onChange={(e) => setData(e.target.value)}
+          disabled={busy}
+          spellCheck={false}
+          rows={3}
+          className={cn(
+            "mt-2 w-full resize-y rounded-md border bg-[var(--color-bg-elevated)] px-2.5 py-1.5 font-mono text-xs",
+            invalid
+              ? "border-[var(--color-danger)]"
+              : "border-[var(--color-border)]",
+          )}
+        />
+      )}
 
       {invalid && (
         <p

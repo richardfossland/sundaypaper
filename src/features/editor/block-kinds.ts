@@ -17,6 +17,8 @@ export const BLOCK_KINDS = [
   "form_field",
   "checkbox",
   "signature",
+  // Structured grid: service orders, rosters, schedules, magazine grids.
+  "table",
 ] as const;
 
 /** Validate a string is parseable JSON; returns an error message or null. */
