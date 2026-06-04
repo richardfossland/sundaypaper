@@ -14,3 +14,6 @@ export const projectsKey = ["projects"] as const;
 /** Query key for a project's documents. */
 export const documentsKey = (projectId: string) =>
   ["documents", projectId] as const;
+
+/** Query key for the song catalog list. */
+export const songsKey = ["songs"] as const;

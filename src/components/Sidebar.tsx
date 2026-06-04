@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   Library,
+  Music,
   LayoutTemplate,
   PenSquare,
   Scissors,
@@ -17,6 +18,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 type Route =
   | "dashboard"
   | "library"
+  | "songs"
   | "builder"
   | "templates"
   | "splitter"
@@ -35,6 +37,7 @@ interface SidebarProps {
 const NAV_ITEMS: Array<{ id: Route; label: string; icon: typeof Library }> = [
   { id: "dashboard", label: "Dashbord", icon: LayoutDashboard },
   { id: "library", label: "Bibliotek", icon: Library },
+  { id: "songs", label: "Sanger", icon: Music },
   { id: "builder", label: "Bygger", icon: LayoutTemplate },
   { id: "templates", label: "Maler", icon: PenSquare },
   { id: "splitter", label: "Klipper", icon: Scissors },

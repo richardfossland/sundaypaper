@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Library,
+  Music,
   LayoutTemplate,
   PenSquare,
   Scissors,
@@ -89,6 +90,11 @@ export function CommandPalette({ onNavigate }: CommandPaletteProps) {
               onSelect={() => go("library")}
               icon={<Library size={14} />}
               label="Bibliotek"
+            />
+            <Item
+              onSelect={() => go("songs")}
+              icon={<Music size={14} />}
+              label="Sanger"
             />
             <Item
               onSelect={() => go("builder")}
