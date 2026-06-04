@@ -35,19 +35,7 @@ import type { Setting } from "@/lib/bindings";
 import { useTheme } from "@/lib/theme";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/cn";
-
-// ── Known setting keys ──────────────────────────────────────────────────────
-// Centralised so the page, the tests and any future caller agree on the wire
-// names. Values are always strings (the backend store is a TEXT key/value map).
-
-export const SETTING_KEYS = {
-  locale: "locale",
-  anthropicApiKey: "anthropic_api_key",
-  anthropicKeyInKeychain: "anthropic_api_key_in_keychain",
-  cloudAiEnabled: "cloud_ai_enabled",
-  cloudBackupEnabled: "cloud_backup_enabled",
-  telemetryEnabled: "telemetry_enabled",
-} as const;
+import { SETTING_KEYS } from "./settings-keys";
 
 // ── Language options ──────────────────────────────────────────────────────────
 // Matches the suite-wide locale set (see CLAUDE.md "Languages").

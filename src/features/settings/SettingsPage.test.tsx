@@ -50,7 +50,8 @@ vi.mock("@/lib/ipc", () => ({
   IPCError: FakeIPCError,
 }));
 
-import { SettingsPage, SETTING_KEYS } from "./SettingsPage";
+import { SettingsPage } from "./SettingsPage";
+import { SETTING_KEYS } from "./settings-keys";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
