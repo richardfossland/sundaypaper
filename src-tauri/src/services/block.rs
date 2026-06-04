@@ -166,6 +166,66 @@ impl BlockRepo {
         self.get(id).await
     }
 
+    /// Move a block under a new parent (or to the top level when `new_parent_id`
+    /// is `None`), appending it to the end of the destination sibling group.
+    ///
+    /// This is what nests a block inside a container (a `two_column` / `callout`)
+    /// from the editor. Three invariants keep the tree well-formed:
+    /// - the destination parent must belong to the same document (no cross-doc
+    ///   moves);
+    /// - a block may not be reparented onto itself; and
+    /// - a block may not be moved under one of its own descendants (that would
+    ///   create a cycle the renderer would recurse on forever).
+    ///
+    /// The block keeps its `data`/`kind`; only `parent_id` (and its position in
+    /// the new group) changes. Positions in the destination group renormalise to
+    /// a dense `0..N` range via [`reorder`] so the new node lands last.
+    pub async fn reparent(&self, id: &str, new_parent_id: Option<&str>) -> AppResult<Block> {
+        let block = self.get(id).await?;
+
+        if let Some(parent_id) = new_parent_id {
+            if parent_id == id {
+                return Err(AppError::Validation(
+                    "a block cannot be its own parent".into(),
+                ));
+            }
+            let parent = self.get(parent_id).await?;
+            if parent.document_id != block.document_id {
+                return Err(AppError::Validation(
+                    "cannot move a block into a different document".into(),
+                ));
+            }
+            // Reject a move under one of the block's own descendants (cycle).
+            let all = self.list_by_document(&block.document_id).await?;
+            if is_descendant_of(&all, parent_id, id) {
+                return Err(AppError::Validation(
+                    "cannot move a block under its own descendant".into(),
+                ));
+            }
+        }
+
+        // No-op move keeps the row untouched (and its position) — return as is.
+        if block.parent_id.as_deref() == new_parent_id {
+            return Ok(block);
+        }
+
+        // Append to the end of the destination group, then let `reorder`
+        // renormalise that group densely.
+        let position = self
+            .next_position(&block.document_id, new_parent_id)
+            .await?;
+        sqlx::query("UPDATE block SET parent_id = ?, position = ?, updated_at = ? WHERE id = ?")
+            .bind(new_parent_id)
+            .bind(position)
+            .bind(now_ms())
+            .bind(id)
+            .execute(&self.db.pool)
+            .await?;
+        // Renormalise the destination group to a dense range (and clamp the new
+        // node to the end of it).
+        self.reorder(id, i64::MAX).await
+    }
+
     /// Hard-delete a block and its subtree (via the self-referential cascade).
     pub async fn delete(&self, id: &str) -> AppResult<()> {
         let affected = sqlx::query("DELETE FROM block WHERE id = ?")
@@ -195,6 +255,26 @@ impl BlockRepo {
         .await?;
         Ok(max.map(|m| m + 1).unwrap_or(0))
     }
+}
+
+/// Walk the parent chain of `start` (over a flat block list) and report whether
+/// `ancestor` appears among its ancestors — i.e. is `start` inside `ancestor`'s
+/// subtree? Used by [`BlockRepo::reparent`] to reject cycle-creating moves. The
+/// walk is bounded by the list length, so a pre-existing malformed cycle in the
+/// data can't loop forever.
+fn is_descendant_of(all: &[Block], start: &str, ancestor: &str) -> bool {
+    let mut current = Some(start.to_string());
+    for _ in 0..all.len() {
+        let Some(cur) = current else { return false };
+        if cur == ancestor {
+            return true;
+        }
+        current = all
+            .iter()
+            .find(|b| b.id == cur)
+            .and_then(|b| b.parent_id.clone());
+    }
+    false
 }
 
 /// Validate that `data` parses as JSON; an empty string normalises to `{}`.
@@ -369,5 +449,125 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    // --- reparent (Step 2: block nesting) -------------------------------------
+
+    #[tokio::test]
+    async fn reparent_moves_block_under_a_new_parent() {
+        let (blocks, doc) = fixture().await;
+        let container = blocks.create(&doc, None, "two_column", "").await.unwrap();
+        let leaf = blocks.create(&doc, None, "text", "").await.unwrap();
+        assert_eq!(leaf.parent_id, None);
+
+        let moved = blocks
+            .reparent(&leaf.id, Some(&container.id))
+            .await
+            .unwrap();
+        assert_eq!(moved.parent_id.as_deref(), Some(container.id.as_str()));
+        assert_eq!(moved.position, 0, "lands first in the empty group");
+    }
+
+    #[tokio::test]
+    async fn reparent_appends_to_end_of_destination_group() {
+        let (blocks, doc) = fixture().await;
+        let container = blocks.create(&doc, None, "callout", "").await.unwrap();
+        let existing = blocks
+            .create(&doc, Some(&container.id), "text", "")
+            .await
+            .unwrap();
+        let incoming = blocks.create(&doc, None, "song", "").await.unwrap();
+
+        let moved = blocks
+            .reparent(&incoming.id, Some(&container.id))
+            .await
+            .unwrap();
+        // The new child lands AFTER the existing one, positions dense.
+        let children: Vec<_> = blocks
+            .list_by_document(&doc)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|b| b.parent_id.as_deref() == Some(container.id.as_str()))
+            .map(|b| (b.id, b.position))
+            .collect();
+        assert_eq!(children, vec![(existing.id, 0), (moved.id, 1)]);
+    }
+
+    #[tokio::test]
+    async fn reparent_to_top_level_clears_parent() {
+        let (blocks, doc) = fixture().await;
+        let container = blocks.create(&doc, None, "two_column", "").await.unwrap();
+        let child = blocks
+            .create(&doc, Some(&container.id), "text", "")
+            .await
+            .unwrap();
+
+        let moved = blocks.reparent(&child.id, None).await.unwrap();
+        assert_eq!(moved.parent_id, None, "back at the top level");
+    }
+
+    #[tokio::test]
+    async fn reparent_rejects_self_parent() {
+        let (blocks, doc) = fixture().await;
+        let b = blocks.create(&doc, None, "callout", "").await.unwrap();
+        let err = blocks.reparent(&b.id, Some(&b.id)).await.unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    #[tokio::test]
+    async fn reparent_rejects_cycle_into_own_descendant() {
+        let (blocks, doc) = fixture().await;
+        let outer = blocks.create(&doc, None, "two_column", "").await.unwrap();
+        let inner = blocks
+            .create(&doc, Some(&outer.id), "callout", "")
+            .await
+            .unwrap();
+        // Moving `outer` under its own child `inner` would create a cycle.
+        let err = blocks
+            .reparent(&outer.id, Some(&inner.id))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)));
+        // The tree is unchanged: outer is still top-level.
+        let outer_after = blocks.get(&outer.id).await.unwrap();
+        assert_eq!(outer_after.parent_id, None);
+    }
+
+    #[tokio::test]
+    async fn reparent_unknown_block_is_not_found() {
+        let (blocks, _doc) = fixture().await;
+        let err = blocks.reparent("nope", None).await.unwrap_err();
+        assert!(matches!(
+            err,
+            AppError::NotFound {
+                entity: "block",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn is_descendant_of_walks_the_parent_chain() {
+        let mk = |id: &str, parent: Option<&str>| Block {
+            id: id.into(),
+            document_id: "d".into(),
+            parent_id: parent.map(str::to_string),
+            kind: "text".into(),
+            position: 0,
+            data: "{}".into(),
+            created_at: 0,
+            updated_at: 0,
+        };
+        // a → b → c (c's ancestor chain is b, a).
+        let all = [mk("a", None), mk("b", Some("a")), mk("c", Some("b"))];
+        assert!(is_descendant_of(&all, "c", "a"));
+        assert!(is_descendant_of(&all, "c", "b"));
+        assert!(is_descendant_of(&all, "b", "a"));
+        assert!(!is_descendant_of(&all, "a", "c"));
+        assert!(
+            is_descendant_of(&all, "a", "a"),
+            "a node is its own subtree"
+        );
     }
 }

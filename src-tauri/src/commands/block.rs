@@ -60,6 +60,17 @@ pub async fn block_reorder(
 }
 
 #[tauri::command]
+pub async fn block_reparent(
+    state: State<'_, AppState>,
+    id: String,
+    new_parent_id: Option<String>,
+) -> AppResult<Block> {
+    BlockRepo::new(state.db.clone())
+        .reparent(&id, new_parent_id.as_deref())
+        .await
+}
+
+#[tauri::command]
 pub async fn block_delete(state: State<'_, AppState>, id: String) -> AppResult<()> {
     BlockRepo::new(state.db.clone()).delete(&id).await
 }
