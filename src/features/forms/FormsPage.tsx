@@ -31,22 +31,15 @@ import {
   Wand2,
 } from "lucide-react";
 
-import { ipc, IPCError } from "@/lib/ipc";
+import { ipc, errMessage } from "@/lib/ipc";
 import type { Block } from "@/lib/bindings";
 import { PdfPreview } from "@/features/builder/PdfPreview";
 import { DocumentSelector } from "@/features/editor/DocumentSelector";
 import { BlockList } from "@/features/editor/BlockList";
+import { documentsKey } from "@/lib/queryKeys";
 
-/** Query keys kept in one place so mutations can invalidate them. */
+/** Query key for a document's blocks — kept local so mutations can invalidate. */
 const blocksKey = (documentId: string) => ["blocks", documentId] as const;
-const documentsKey = (projectId: string) => ["documents", projectId] as const;
-
-/** Pull a readable message out of whatever a mutation rejected with. */
-function errMessage(err: unknown, fallback: string): string {
-  if (err instanceof IPCError) return `${err.code} — ${err.message}`;
-  if (err instanceof Error) return err.message;
-  return fallback;
-}
 
 /**
  * The three quick-add field kinds and the JSON skeleton each new block gets.

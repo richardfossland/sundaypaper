@@ -31,20 +31,13 @@ import {
   Wand2,
 } from "lucide-react";
 
-import { ipc, IPCError } from "@/lib/ipc";
+import { ipc, errMessage } from "@/lib/ipc";
 import type { Document, ServicePlan } from "@/lib/bindings";
 import { cn } from "@/lib/cn";
-import { ServicePlanForm, emptyPlan } from "./ServicePlanForm";
+import { projectsKey } from "@/lib/queryKeys";
+import { ServicePlanForm } from "./ServicePlanForm";
+import { emptyPlan } from "./plan-defaults";
 import { PdfPreview } from "./PdfPreview";
-
-const PROJECTS_KEY = ["projects"] as const;
-
-/** Pull a readable message out of whatever a mutation rejected with. */
-function errMessage(err: unknown, fallback: string): string {
-  if (err instanceof IPCError) return `${err.code} — ${err.message}`;
-  if (err instanceof Error) return err.message;
-  return fallback;
-}
 
 export function BuilderPage() {
   const qc = useQueryClient();
@@ -56,7 +49,7 @@ export function BuilderPage() {
 
   // ── Projects ──────────────────────────────────────────────────────────────
   const projects = useQuery({
-    queryKey: PROJECTS_KEY,
+    queryKey: projectsKey,
     queryFn: () => ipc.project.list(),
   });
 
@@ -65,7 +58,7 @@ export function BuilderPage() {
     onSuccess: (p) => {
       setProjectId(p.id);
       setNewProjectName("");
-      qc.invalidateQueries({ queryKey: PROJECTS_KEY });
+      qc.invalidateQueries({ queryKey: projectsKey });
     },
   });
 

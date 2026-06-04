@@ -25,13 +25,11 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { ipc, IPCError } from "@/lib/ipc";
+import { ipc, errMessage } from "@/lib/ipc";
 import type { Document, ExportOptions } from "@/lib/bindings";
 import { cn } from "@/lib/cn";
+import { projectsKey, documentsKey } from "@/lib/queryKeys";
 import { PdfPreview } from "@/features/builder/PdfPreview";
-
-const PROJECTS_KEY = ["projects"] as const;
-const documentsKey = (projectId: string) => ["documents", projectId] as const;
 
 /** Paper sizes the options panel offers; "" means "keep each document's own". */
 const PAPER_OPTIONS: { value: string; label: string }[] = [
@@ -40,13 +38,6 @@ const PAPER_OPTIONS: { value: string; label: string }[] = [
   { value: "a5", label: "A5" },
   { value: "us-letter", label: "US Letter" },
 ];
-
-/** Pull a readable message out of whatever a query/mutation rejected with. */
-function errMessage(err: unknown, fallback: string): string {
-  if (err instanceof IPCError) return `${err.code} — ${err.message}`;
-  if (err instanceof Error) return err.message;
-  return fallback;
-}
 
 export function ExportPage() {
   const [projectId, setProjectId] = useState("");
@@ -59,7 +50,7 @@ export function ExportPage() {
 
   // ── Data ────────────────────────────────────────────────────────────────────
   const projects = useQuery({
-    queryKey: PROJECTS_KEY,
+    queryKey: projectsKey,
     queryFn: () => ipc.project.list(),
   });
 
