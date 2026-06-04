@@ -333,6 +333,42 @@ mod tests {
         finish_pdf(&mut doc, path, pages_id, kids);
     }
 
+    /// Build a 2-page PDF whose page ObjectIds run *opposite* to the visual
+    /// (Kids) order: the first page (MediaBox width 201) gets a HIGHER ObjectId
+    /// than the second page (width 202). Linearized/optimised PDFs routinely do
+    /// this. Used to prove merge preserves page order, not ObjectId order.
+    fn build_reverse_id_pdf(path: &Path) {
+        let mut doc = Document::with_version("1.5");
+        let pages_id = doc.new_object_id();
+
+        // Allocate the SECOND visual page first -> it gets the lower ObjectId.
+        let content_b = Content { operations: vec![] };
+        let content_b_id = doc.add_object(Stream::new(dictionary! {}, content_b.encode().unwrap()));
+        let page_b = doc.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages_id,
+            "Contents" => content_b_id,
+            "MediaBox" => vec![0.into(), 0.into(), 202.into(), 842.into()],
+        });
+
+        // Allocate the FIRST visual page second -> it gets the higher ObjectId.
+        let content_a = Content { operations: vec![] };
+        let content_a_id = doc.add_object(Stream::new(dictionary! {}, content_a.encode().unwrap()));
+        let page_a = doc.add_object(dictionary! {
+            "Type" => "Page",
+            "Parent" => pages_id,
+            "Contents" => content_a_id,
+            "MediaBox" => vec![0.into(), 0.into(), 201.into(), 842.into()],
+        });
+
+        // Sanity: page_a (visual first) really does have the higher ObjectId.
+        assert!(page_a.0 > page_b.0, "fixture must reverse id vs visual order");
+
+        // Kids in VISUAL order: page A (width 201) first, page B (width 202) next.
+        let kids = vec![page_a.into(), page_b.into()];
+        finish_pdf(&mut doc, path, pages_id, kids);
+    }
+
     fn finish_pdf(doc: &mut Document, path: &Path, pages_id: ObjectId, kids: Vec<Object>) {
         let count = kids.len() as i64;
         doc.objects.insert(
@@ -445,6 +481,32 @@ mod tests {
         let first = *pages.get(&1).unwrap();
         let dict = doc.get_object(first).unwrap().as_dict().unwrap();
         assert_eq!(dict.get(b"Rotate").unwrap().as_i64().unwrap(), 90);
+    }
+
+    #[test]
+    fn merge_preserves_visual_page_order_over_object_id_order() {
+        // A reverse-id input: visual page 1 has a HIGHER ObjectId than page 2.
+        // merge must emit pages in visual (Kids) order, not ObjectId order.
+        let dir = tempfile::tempdir().unwrap();
+        let a = dir.path().join("a.pdf");
+        let b = dir.path().join("b.pdf");
+        let out = dir.path().join("merged.pdf");
+        build_reverse_id_pdf(&a);
+        build_pdf(&b, 1);
+        merge(
+            &[a.to_string_lossy().into(), b.to_string_lossy().into()],
+            &out,
+        )
+        .unwrap();
+        let widths = page_widths(&out);
+        assert_eq!(widths.len(), 3, "two pages from A + one from B");
+        // The first two pages must follow A's Kids order (201 then 202), not the
+        // ObjectId order (which would scramble them to 202 then 201).
+        assert_eq!(
+            &widths[..2],
+            &[201.0, 202.0],
+            "merged pages must follow visual order, not ObjectId order"
+        );
     }
 
     #[test]
