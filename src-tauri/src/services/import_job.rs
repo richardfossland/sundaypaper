@@ -31,6 +31,12 @@ pub struct ImportJob {
 /// The lifecycle states a job moves through.
 const STATUSES: [&str; 4] = ["pending", "running", "done", "error"];
 
+/// `done` and `error` are terminal: once a job reaches one it cannot move
+/// again. Mirrors `SangbokJobStatus::is_terminal` for the parallel job log.
+fn is_terminal(status: &str) -> bool {
+    status == "done" || status == "error"
+}
+
 pub struct ImportJobRepo {
     db: Db,
 }
@@ -109,6 +115,15 @@ impl ImportJobRepo {
                 "unknown import status '{status}' (expected one of {STATUSES:?})"
             )));
         }
+        // Reject advancing out of a terminal state — a finished/errored job must
+        // not be silently reopened. Fetch the current status first.
+        let current = self.get(id).await?;
+        if is_terminal(&current.status) {
+            return Err(AppError::Validation(format!(
+                "import_job {id} is already in terminal state '{}' and cannot transition to '{status}'",
+                current.status
+            )));
+        }
         let affected = sqlx::query(
             "UPDATE import_job SET status = ?, detail = ?, updated_at = ? WHERE id = ?",
         )
@@ -148,6 +163,45 @@ mod tests {
             .unwrap();
         assert_eq!(job.status, "done");
         assert_eq!(job.detail.as_deref(), Some("12 pages"));
+    }
+
+    #[tokio::test]
+    async fn terminal_job_cannot_be_reopened() {
+        let repo = repo().await;
+        let job = repo.create(None, "/in/scan.pdf", "ocr").await.unwrap();
+        // Drive it to the terminal `done` state.
+        let job = repo
+            .update_status(&job.id, "done", Some("12 pages"))
+            .await
+            .unwrap();
+        assert_eq!(job.status, "done");
+
+        // Reopening a finished job (done -> running) corrupts the job-log
+        // invariant the UI relies on and must be rejected.
+        assert!(matches!(
+            repo.update_status(&job.id, "running", None)
+                .await
+                .unwrap_err(),
+            AppError::Validation(_)
+        ));
+        // And it must stay terminal.
+        assert_eq!(repo.get(&job.id).await.unwrap().status, "done");
+    }
+
+    #[tokio::test]
+    async fn errored_job_cannot_be_resurrected() {
+        let repo = repo().await;
+        let job = repo.create(None, "/in/scan.pdf", "split").await.unwrap();
+        repo.update_status(&job.id, "error", Some("boom"))
+            .await
+            .unwrap();
+        assert!(matches!(
+            repo.update_status(&job.id, "pending", None)
+                .await
+                .unwrap_err(),
+            AppError::Validation(_)
+        ));
+        assert_eq!(repo.get(&job.id).await.unwrap().status, "error");
     }
 
     #[tokio::test]
