@@ -110,7 +110,12 @@ pub fn build_typst_document(meta: &LayoutMeta, blocks: &[RenderBlock]) -> String
 fn preamble(meta: &LayoutMeta) -> String {
     let paper = normalize_paper(&meta.paper);
     let size = clamp_font_size(meta.font_size_pt);
-    let lang_line = match meta.lang.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    let lang_line = match meta
+        .lang
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         Some(lang) => format!(", lang: \"{}\"", escape_string(lang)),
         None => String::new(),
     };
@@ -144,6 +149,23 @@ fn preamble(meta: &LayoutMeta) -> String {
          #let bp-sign(label, width: 60%) = block(below: 0.8em)[\n  \
              #box(width: width, stroke: (bottom: 0.5pt + black), inset: (bottom: 2pt))[~]\n  \
              #if label != none {{ [\\\n#text(size: 0.8em, fill: gray)[#label]] }}\n\
+         ]\n\
+         // Table helper: a grid of content cells. `cols` is the column count,\n\
+         // `stroke` selects the inner-rule style (a length for a full grid, or\n\
+         // none), `frame` draws an outer rule around the whole table, and\n\
+         // `header` shades + bolds the first row. Cells arrive as a flat,\n\
+         // row-major content array already padded to a full grid by the caller.\n\
+         #let bp-table(cols, stroke, frame, header, ..cells) = block(\n    \
+             below: 0.7em,\n    \
+             stroke: if frame {{ 0.5pt + black }} else {{ none }},\n  \
+         )[\n  \
+             #let items = cells.pos()\n  \
+             #table(\n    \
+                 columns: cols,\n    \
+                 stroke: stroke,\n    \
+                 ..if header and items.len() >= cols {{ items.slice(0, cols).map(c => table.cell(fill: luma(230))[#text(weight: \"bold\")[#c]]) }} else {{ () }},\n    \
+                 ..if header {{ items.slice(calc.min(cols, items.len())) }} else {{ items }},\n  \
+             )\n\
          ]\n\n",
     )
 }
@@ -171,6 +193,7 @@ fn render_block(block: &RenderBlock) -> String {
         "form_field" => s.push_str(&render_form_field(d)),
         "checkbox" => s.push_str(&render_checkbox(d)),
         "signature" => s.push_str(&render_signature(d)),
+        "table" => s.push_str(&render_table(d)),
         // "text" and any unknown future kind.
         _ => s.push_str(&render_text(d)),
     }
@@ -328,11 +351,7 @@ fn render_image(d: &serde_json::Value) -> String {
         Some(path) => {
             let img = format!("image(\"{}\", width: 80%)", escape_string(&path));
             match caption {
-                Some(c) => format!(
-                    "#figure({}, caption: [{}])\n",
-                    img,
-                    escape_content(&c)
-                ),
+                Some(c) => format!("#figure({}, caption: [{}])\n", img, escape_content(&c)),
                 None => format!("#align(center)[#{}]\n", img),
             }
         }
@@ -377,6 +396,86 @@ fn render_signature(d: &serde_json::Value) -> String {
     // overrides it.
     let width = field_width_or(d, "60%");
     format!("#bp-sign({}, width: {})\n", content_arg(&label), width)
+}
+
+/// `table` — a grid of content cells (service orders, rosters, schedules,
+/// magazine grids). The payload carries the grid dimensions, a flat list of
+/// `{rowIndex, colIndex, content}` cells, a `headerRow` flag, and a `borders`
+/// keyword. The renderer rebuilds a dense, row-major cell array so ragged or
+/// sparse input still produces a well-formed `#table`: every cell is run
+/// through [`escape_content`], missing cells become an empty `[]`, and any cell
+/// outside the declared dimensions is dropped (so a stray index can never grow
+/// the grid or inject markup). A 0×0 grid renders nothing rather than an empty
+/// `#table()` that would just take vertical space.
+fn render_table(d: &serde_json::Value) -> String {
+    let cols = dimension(d, "numCols");
+    let rows = dimension(d, "numRows");
+    if cols == 0 || rows == 0 {
+        return String::new();
+    }
+    let header = d
+        .get("headerRow")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let (stroke, frame) = table_borders(d);
+
+    // Dense row-major grid seeded with empty cells, then filled from the sparse
+    // payload. Out-of-range indices are ignored, so the grid stays exactly
+    // rows×cols regardless of what the payload claims.
+    let mut grid: Vec<String> = vec![String::new(); rows * cols];
+    if let Some(cells) = d.get("cells").and_then(serde_json::Value::as_array) {
+        for cell in cells {
+            let r = cell.get("rowIndex").and_then(serde_json::Value::as_u64);
+            let c = cell.get("colIndex").and_then(serde_json::Value::as_u64);
+            let (Some(r), Some(c)) = (r, c) else { continue };
+            let (r, c) = (r as usize, c as usize);
+            if r >= rows || c >= cols {
+                continue;
+            }
+            let content = cell
+                .get("content")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            grid[r * cols + c] = escape_content(content);
+        }
+    }
+
+    // Emit `#bp-table(cols, stroke, frame, header, [c0], [c1], …)` with one
+    // bracketed content arg per cell, in row-major order.
+    let mut s = format!("#bp-table({}, {}, {}, {}", cols, stroke, frame, header);
+    for cell in &grid {
+        s.push_str(&format!(", [{}]", cell));
+    }
+    s.push_str(")\n");
+    s
+}
+
+/// Read a non-negative grid dimension (`numRows` / `numCols`) from the payload,
+/// clamped to a sane upper bound so a malformed payload can't ask for a
+/// million-cell table. Absent / non-numeric → 0.
+fn dimension(d: &serde_json::Value, key: &str) -> usize {
+    let n = d.get(key).and_then(serde_json::Value::as_u64).unwrap_or(0) as usize;
+    n.min(MAX_TABLE_DIM)
+}
+
+/// Upper bound on table rows/columns (defensive — the editor never asks for
+/// anything near this, but a hand-edited payload shouldn't be able to).
+const MAX_TABLE_DIM: usize = 64;
+
+/// Map the `borders` keyword to the `(stroke, frame)` pair `#bp-table` expects.
+/// Only a fixed set is accepted (no expression injection):
+/// - `all` → full inner grid, no extra frame (the grid already frames it);
+/// - `none` → no rules at all;
+/// - `outer` (and any unknown value, the safe default) → no inner rules, a
+///   single outer frame drawn by the wrapping block.
+///
+/// `stroke` is a Typst length expression or `none`; `frame` is a bool literal.
+fn table_borders(d: &serde_json::Value) -> (&'static str, &'static str) {
+    match field(d, "borders").as_deref().map(str::to_ascii_lowercase) {
+        Some(b) if b == "none" => ("none", "false"),
+        Some(b) if b == "all" => ("0.5pt + black", "false"),
+        _ => ("none", "true"),
+    }
 }
 
 /// `text` and the fallback for unknown kinds — an optional bold title + body.
@@ -424,7 +523,9 @@ fn string_list(d: &serde_json::Value, key: &str) -> Vec<String> {
 /// The `role` discriminator a block may carry (heading/liturgy), defaulting to
 /// an empty string when absent.
 fn role(d: &serde_json::Value) -> &str {
-    d.get("role").and_then(serde_json::Value::as_str).unwrap_or("")
+    d.get("role")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("")
 }
 
 /// Map a form field's optional `width` keyword to a Typst length literal for the
@@ -823,7 +924,9 @@ mod tests {
             json!({ "url": "/assets/banner.png", "caption": "He is risen" }),
         );
         let src = doc(&[b]);
-        assert!(src.contains("#figure(image(\"/assets/banner.png\", width: 80%), caption: [He is risen])"));
+        assert!(src.contains(
+            "#figure(image(\"/assets/banner.png\", width: 80%), caption: [He is risen])"
+        ));
     }
 
     #[test]
@@ -857,10 +960,7 @@ mod tests {
 
     #[test]
     fn page_break_hint_emits_pagebreak_before_block() {
-        let b = RenderBlock::leaf(
-            "song",
-            json!({ "title": "Hymn", "pageBreak": true }),
-        );
+        let b = RenderBlock::leaf("song", json!({ "title": "Hymn", "pageBreak": true }));
         let src = doc(&[b]);
         let pb = src.find("#pagebreak()").expect("pagebreak emitted");
         let heading = src.find("#bp-heading([Hymn])").expect("heading emitted");
@@ -1071,6 +1171,168 @@ mod tests {
         assert_eq!(RenderBlock::from_spec("text", "[1,2]").data, json!({}));
     }
 
+    // --- table (Step 1: TableBlock) -------------------------------------------
+
+    #[test]
+    fn preamble_defines_table_helper() {
+        let src = build_typst_document(&LayoutMeta::default(), &[]);
+        assert!(src.contains("#let bp-table"));
+    }
+
+    #[test]
+    fn table_2x3_emits_dense_row_major_grid() {
+        let b = RenderBlock::leaf(
+            "table",
+            json!({
+                "numRows": 2,
+                "numCols": 3,
+                "borders": "all",
+                "cells": [
+                    {"rowIndex": 0, "colIndex": 0, "content": "Tid"},
+                    {"rowIndex": 0, "colIndex": 1, "content": "Aktivitet"},
+                    {"rowIndex": 0, "colIndex": 2, "content": "Ansvarlig"},
+                    {"rowIndex": 1, "colIndex": 0, "content": "11:00"},
+                    {"rowIndex": 1, "colIndex": 1, "content": "Velkomst"},
+                    {"rowIndex": 1, "colIndex": 2, "content": "Anne"},
+                ],
+            }),
+        );
+        let src = doc(&[b]);
+        // cols=3, inner grid (all → stroke set, no outer frame), header=false.
+        assert!(src.contains(
+            "#bp-table(3, 0.5pt + black, false, false, [Tid], [Aktivitet], [Ansvarlig], [11:00], [Velkomst], [Anne])"
+        ));
+    }
+
+    #[test]
+    fn table_header_row_sets_header_flag() {
+        let b = RenderBlock::leaf(
+            "table",
+            json!({
+                "numRows": 1,
+                "numCols": 2,
+                "headerRow": true,
+                "borders": "all",
+                "cells": [
+                    {"rowIndex": 0, "colIndex": 0, "content": "A"},
+                    {"rowIndex": 0, "colIndex": 1, "content": "B"},
+                ],
+            }),
+        );
+        let src = doc(&[b]);
+        assert!(src.contains("#bp-table(2, 0.5pt + black, false, true, [A], [B])"));
+    }
+
+    #[test]
+    fn table_border_keywords_map_to_stroke_and_frame() {
+        let mk = |borders: &str| {
+            RenderBlock::leaf(
+                "table",
+                json!({ "numRows": 1, "numCols": 1, "borders": borders,
+                        "cells": [{"rowIndex": 0, "colIndex": 0, "content": "x"}] }),
+            )
+        };
+        // all → inner grid, no frame.
+        assert!(doc(&[mk("all")]).contains("#bp-table(1, 0.5pt + black, false, false, [x])"));
+        // none → no inner rules, no frame.
+        assert!(doc(&[mk("none")]).contains("#bp-table(1, none, false, false, [x])"));
+        // outer → no inner rules, an outer frame.
+        assert!(doc(&[mk("outer")]).contains("#bp-table(1, none, true, false, [x])"));
+        // unknown keyword → safe default (outer frame), never an injected value.
+        assert!(doc(&[mk("ginormous")]).contains("#bp-table(1, none, true, false, [x])"));
+    }
+
+    #[test]
+    fn table_missing_cells_become_empty_and_grid_stays_dense() {
+        // 2x2 grid but only one cell supplied → the other three are empty [].
+        let b = RenderBlock::leaf(
+            "table",
+            json!({
+                "numRows": 2,
+                "numCols": 2,
+                "borders": "all",
+                "cells": [{"rowIndex": 1, "colIndex": 1, "content": "only"}],
+            }),
+        );
+        let src = doc(&[b]);
+        assert!(src.contains("#bp-table(2, 0.5pt + black, false, false, [], [], [], [only])"));
+    }
+
+    #[test]
+    fn table_out_of_range_cell_indices_are_dropped() {
+        // Indices beyond the 1x1 grid must be ignored — they cannot grow the
+        // grid (which stays exactly numRows×numCols = one empty cell).
+        let b = RenderBlock::leaf(
+            "table",
+            json!({
+                "numRows": 1,
+                "numCols": 1,
+                "borders": "all",
+                "cells": [
+                    {"rowIndex": 5, "colIndex": 0, "content": "off-row"},
+                    {"rowIndex": 0, "colIndex": 9, "content": "off-col"},
+                ],
+            }),
+        );
+        let src = doc(&[b]);
+        assert!(src.contains("#bp-table(1, 0.5pt + black, false, false, [])"));
+        assert!(!src.contains("off-row"));
+        assert!(!src.contains("off-col"));
+    }
+
+    #[test]
+    fn table_zero_dimension_emits_nothing() {
+        for d in [
+            json!({ "numRows": 0, "numCols": 3 }),
+            json!({ "numRows": 3, "numCols": 0 }),
+            json!({}), // both absent → 0x0
+        ] {
+            let src = doc(&[RenderBlock::leaf("table", d)]);
+            assert!(
+                !src.contains("#bp-table("),
+                "0-dim table emits no #bp-table"
+            );
+        }
+    }
+
+    #[test]
+    fn table_cell_content_is_escaped_and_cannot_inject_markup() {
+        // A cell carrying Typst structural chars must not break out of its [..].
+        let b = RenderBlock::leaf(
+            "table",
+            json!({
+                "numRows": 1,
+                "numCols": 2,
+                "borders": "all",
+                "cells": [
+                    {"rowIndex": 0, "colIndex": 0, "content": "a] #panic() [b"},
+                    {"rowIndex": 0, "colIndex": 1, "content": "$ # *"},
+                ],
+            }),
+        );
+        let src = doc(&[b]);
+        assert!(src.contains("\\]"), "closing bracket escaped");
+        assert!(src.contains("\\#panic"), "function call neutralised");
+        assert!(!src.contains("[a] #panic"), "raw injection impossible");
+        // The escaped cell sits inside a content arg, grid still dense (2 cells).
+        assert!(src.contains(
+            "#bp-table(2, 0.5pt + black, false, false, [a\\] \\#panic() \\[b], [\\$ \\# \\*])"
+        ));
+    }
+
+    #[test]
+    fn table_dimensions_are_clamped_to_a_sane_bound() {
+        // A hand-edited payload asking for an absurd grid is clamped, never
+        // allocating a million cells.
+        let b = RenderBlock::leaf(
+            "table",
+            json!({ "numRows": 1, "numCols": 100_000, "borders": "none" }),
+        );
+        let src = doc(&[b]);
+        // 100_000 cols clamped to MAX_TABLE_DIM (64).
+        assert!(src.contains("#bp-table(64, "));
+    }
+
     // --- property fuzzing -----------------------------------------------------
     //
     // Deterministic property tests over the Typst injection-safety contract.
@@ -1190,7 +1452,15 @@ mod tests {
         // pair — i.e. removing all CR and un-doubling each escaped newline leaves
         // a string with no unescaped inline special (subsumes the wrap path).
         let hand = [
-            "\r\n", "\n\r", "a\rb", "\r\r\r", "line1\nline2\n", "#\n#", "-\n+", "\r", "\n",
+            "\r\n",
+            "\n\r",
+            "a\rb",
+            "\r\r\r",
+            "line1\nline2\n",
+            "#\n#",
+            "-\n+",
+            "\r",
+            "\n",
         ];
         let mut rng = SplitMix64::new(0xC0FFEE);
         let mut cases: Vec<String> = hand.iter().map(|s| s.to_string()).collect();
@@ -1288,6 +1558,7 @@ mod tests {
             "form_field",
             "checkbox",
             "signature",
+            "table",
             "text",
             "totally_unknown",
         ];
@@ -1327,6 +1598,33 @@ mod tests {
                     (0..nv).map(|_| json!(fuzz_string(rng, 16))).collect();
                 obj.insert("verses".into(), json!(verses));
                 obj.insert("refrain".into(), json!(fuzz_string(rng, 16)));
+            }
+            // occasionally include a table grid with adversarial cell content,
+            // ragged/out-of-range indices, and a random border keyword, so the
+            // bracket-balance property covers the table renderer too.
+            if rng.below(3) == 0 {
+                let rows = rng.below(4);
+                let cols = rng.below(4);
+                obj.insert("numRows".into(), json!(rows));
+                obj.insert("numCols".into(), json!(cols));
+                obj.insert("headerRow".into(), json!(rng.below(2) == 0));
+                obj.insert(
+                    "borders".into(),
+                    json!(["all", "outer", "none", "weird"][rng.below(4)]),
+                );
+                let ncells = rng.below(8);
+                let cells: Vec<serde_json::Value> = (0..ncells)
+                    .map(|_| {
+                        // Indices may exceed dims (must be ignored) to fuzz the
+                        // out-of-range guard.
+                        json!({
+                            "rowIndex": rng.below(6),
+                            "colIndex": rng.below(6),
+                            "content": fuzz_string(rng, 16),
+                        })
+                    })
+                    .collect();
+                obj.insert("cells".into(), json!(cells));
             }
             let children = if depth < 3 && rng.below(3) == 0 {
                 let nc = rng.below(4);
