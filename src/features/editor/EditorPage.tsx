@@ -20,7 +20,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, FilePlus2, Loader2, Sparkles, Wand2 } from "lucide-react";
 
-import { ipc, IPCError } from "@/lib/ipc";
+import { ipc, errMessage } from "@/lib/ipc";
 import type { Block } from "@/lib/bindings";
 import { PdfPreview } from "@/features/builder/PdfPreview";
 import { DocumentSelector } from "./DocumentSelector";
@@ -28,13 +28,6 @@ import { BlockList } from "./BlockList";
 
 /** Query key for a document's blocks — keep in one place so mutations can invalidate. */
 const blocksKey = (documentId: string) => ["blocks", documentId] as const;
-
-/** Pull a readable message out of whatever a mutation rejected with. */
-function errMessage(err: unknown, fallback: string): string {
-  if (err instanceof IPCError) return `${err.code} — ${err.message}`;
-  if (err instanceof Error) return err.message;
-  return fallback;
-}
 
 export function EditorPage() {
   const qc = useQueryClient();
