@@ -20,3 +20,6 @@ export const songsKey = ["songs"] as const;
 
 /** Query key for the document-template list. */
 export const docTemplatesKey = ["docTemplates"] as const;
+
+/** Query key for the import-job (OCR/ingest) history list. */
+export const importJobsKey = ["importJobs"] as const;
