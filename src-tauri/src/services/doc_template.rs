@@ -209,10 +209,18 @@ impl DocTemplateRepo {
         }
         // Validate kind.
         DocTemplateKind::parse(kind)?;
+        // Validate ALL variable kinds up front, before any INSERT, so a bad var
+        // at any index can never leave a half-built template behind.
+        for var in variables {
+            TemplateVarKind::parse(&var.kind)?;
+        }
 
         let id = Uuid::now_v7().to_string();
         let now = now_ms();
 
+        // Parent row + variables are one atomic unit: a failure anywhere rolls
+        // the whole thing back (same posture as BlockRepo::reorder).
+        let mut tx = self.db.pool.begin().await?;
         sqlx::query(
             "INSERT INTO doc_template (id, name, kind, typst_source, created_at, updated_at) \
              VALUES (?, ?, ?, ?, ?, ?)",
@@ -223,12 +231,11 @@ impl DocTemplateRepo {
         .bind(typst_source)
         .bind(now)
         .bind(now)
-        .execute(&self.db.pool)
+        .execute(&mut *tx)
         .await?;
 
         // Insert variable definitions.
         for (pos, var) in variables.iter().enumerate() {
-            TemplateVarKind::parse(&var.kind)?;
             let var_id = Uuid::now_v7().to_string();
             sqlx::query(
                 "INSERT INTO template_var \
@@ -244,9 +251,10 @@ impl DocTemplateRepo {
             .bind(if var.required { 1i64 } else { 0i64 })
             .bind(pos as i64)
             .bind(now)
-            .execute(&self.db.pool)
+            .execute(&mut *tx)
             .await?;
         }
+        tx.commit().await?;
 
         self.get(&id).await
     }
@@ -882,6 +890,48 @@ mod tests {
                 .unwrap_err(),
             AppError::Validation(_)
         ));
+    }
+
+    /// A bad var at index >= 1 must leave NOTHING persisted: create() is atomic.
+    /// The naive (non-transactional, validate-mid-loop) implementation INSERTs
+    /// the parent row + var 0 before hitting the bad var 1, so an orphaned
+    /// template "T" plus var "a" would linger after the Err.
+    #[tokio::test]
+    async fn create_with_bad_var_at_index_one_persists_nothing() {
+        let repo = repo().await;
+        let vars = vec![
+            TemplateVarInput {
+                name: "a".into(),
+                label: "A".into(),
+                kind: "Text".into(),
+                default_value: None,
+                required: false,
+            },
+            TemplateVarInput {
+                name: "b".into(),
+                label: "B".into(),
+                kind: "BadType".into(),
+                default_value: None,
+                required: false,
+            },
+        ];
+        assert!(matches!(
+            repo.create("T", "Bulletin", "src", &vars)
+                .await
+                .unwrap_err(),
+            AppError::Validation(_)
+        ));
+
+        // No ghost template, and no orphaned variable row.
+        assert!(
+            repo.list(None).await.unwrap().is_empty(),
+            "no orphaned template should remain after a failed create"
+        );
+        let var_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM template_var")
+            .fetch_one(&repo.db.pool)
+            .await
+            .unwrap();
+        assert_eq!(var_count, 0, "no orphaned template_var rows should remain");
     }
 
     #[tokio::test]
