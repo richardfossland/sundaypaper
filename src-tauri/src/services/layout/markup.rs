@@ -1070,4 +1070,294 @@ mod tests {
         assert_eq!(RenderBlock::from_spec("text", "not json").data, json!({}));
         assert_eq!(RenderBlock::from_spec("text", "[1,2]").data, json!({}));
     }
+
+    // --- property fuzzing -----------------------------------------------------
+    //
+    // Deterministic property tests over the Typst injection-safety contract.
+    // No wall-clock, no unseeded RNG: a fixed-seed SplitMix64 drives an
+    // adversarial, structural-char-heavy generator so every run is identical
+    // and any failure is reproducible.
+
+    /// Tiny deterministic PRNG (SplitMix64). Fixed seed → identical sequence.
+    struct SplitMix64(u64);
+    impl SplitMix64 {
+        fn new(seed: u64) -> Self {
+            Self(seed)
+        }
+        fn next_u64(&mut self) -> u64 {
+            self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = self.0;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^ (z >> 31)
+        }
+        fn below(&mut self, n: usize) -> usize {
+            (self.next_u64() % n as u64) as usize
+        }
+    }
+
+    /// Biased alphabet: heavy on Typst structural metacharacters, plus a few
+    /// ordinary chars, newlines/CR, and multibyte unicode to exercise char
+    /// boundaries. The structural set must mirror `escape_content` exactly.
+    const FUZZ_ALPHABET: &[char] = &[
+        // structural set, weighted by repetition
+        '\\', '\\', '#', '#', '$', '*', '_', '`', '<', '>', '@', '~', '[', '[', ']', ']', '/', '=',
+        '-', '-', '+', '+', // line breaks
+        '\n', '\r', '\r', // ordinary
+        'a', 'Z', '5', ' ', // multibyte unicode
+        'æ', '—', '𝄞',
+    ];
+
+    fn fuzz_string(rng: &mut SplitMix64, max_len: usize) -> String {
+        let len = rng.below(max_len + 1);
+        (0..len)
+            .map(|_| FUZZ_ALPHABET[rng.below(FUZZ_ALPHABET.len())])
+            .collect()
+    }
+
+    /// The load-bearing scan: walk `s`, and for every structural metachar
+    /// assert the run of consecutive backslashes immediately preceding it has
+    /// ODD length (so it is escaped, never markup-active). A backslash itself is
+    /// structural, but a `\\` pair is the escape for a literal backslash, so we
+    /// only flag a backslash that is NOT the trailing char of an escape pair —
+    /// handled by checking position parity across runs below.
+    ///
+    /// Returns `Some(byte_offset)` of the first violating special char, else
+    /// `None`. The special set excludes `\\` and `\n` (their escaping is
+    /// verified structurally by the dedicated newline test) — here we check the
+    /// inline markup chars that a raw occurrence would activate.
+    fn first_unescaped_special(s: &str) -> Option<usize> {
+        const SPECIAL: &[char] = &[
+            '#', '$', '*', '_', '`', '<', '>', '@', '~', '[', ']', '/', '=', '-', '+',
+        ];
+        let chars: Vec<(usize, char)> = s.char_indices().collect();
+        for (i, (off, ch)) in chars.iter().enumerate() {
+            if SPECIAL.contains(ch) {
+                // count consecutive backslashes immediately before position i
+                let mut run = 0usize;
+                let mut j = i;
+                while j > 0 && chars[j - 1].1 == '\\' {
+                    run += 1;
+                    j -= 1;
+                }
+                if run.is_multiple_of(2) {
+                    return Some(*off);
+                }
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn fuzz_escape_content_never_emits_unescaped_special() {
+        // Hand-picked adversarial cases first.
+        let hand = [
+            "\\",
+            "\\\\",
+            "#",
+            "\\#",
+            "[x] #panic()",
+            "---",
+            "\n#",
+            "++",
+            "a\\#b",
+            "\\\\#",
+        ];
+        for input in hand {
+            let out = escape_content(input);
+            assert_eq!(
+                first_unescaped_special(&out),
+                None,
+                "hand case {input:?} produced unescaped special in {out:?}"
+            );
+        }
+        // Then thousands of deterministic random adversarial strings.
+        let mut rng = SplitMix64::new(0x5EED);
+        for _ in 0..8000 {
+            let input = fuzz_string(&mut rng, 40);
+            let out = escape_content(&input);
+            assert_eq!(
+                first_unescaped_special(&out),
+                None,
+                "fuzz input {input:?} produced unescaped special in {out:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn fuzz_escape_content_newline_handling_is_sound() {
+        // (a) No bare CR survives. (b) Every '\n' is the second char of a "\\\n"
+        // pair — i.e. removing all CR and un-doubling each escaped newline leaves
+        // a string with no unescaped inline special (subsumes the wrap path).
+        let hand = [
+            "\r\n", "\n\r", "a\rb", "\r\r\r", "line1\nline2\n", "#\n#", "-\n+", "\r", "\n",
+        ];
+        let mut rng = SplitMix64::new(0xC0FFEE);
+        let mut cases: Vec<String> = hand.iter().map(|s| s.to_string()).collect();
+        for _ in 0..4000 {
+            cases.push(fuzz_string(&mut rng, 40));
+        }
+        for input in &cases {
+            let out = escape_content(input);
+            assert!(
+                !out.contains('\r'),
+                "bare CR survived escaping of {input:?} → {out:?}"
+            );
+            // Each '\n' must be immediately preceded by exactly one escape
+            // backslash that is not itself part of an even backslash run.
+            let bytes: Vec<(usize, char)> = out.char_indices().collect();
+            for (i, (_, ch)) in bytes.iter().enumerate() {
+                if *ch == '\n' {
+                    let mut run = 0usize;
+                    let mut j = i;
+                    while j > 0 && bytes[j - 1].1 == '\\' {
+                        run += 1;
+                        j -= 1;
+                    }
+                    assert!(
+                        run % 2 == 1,
+                        "newline not escaped as \\\\\\n in {input:?} → {out:?} (run={run})"
+                    );
+                }
+            }
+        }
+    }
+
+    // --- document-level bracket balance --------------------------------------
+
+    /// Count net unescaped-bracket depth across a Typst source string, treating
+    /// a '[' / ']' as structural only when preceded by an even backslash run.
+    /// Returns `Err(byte_offset)` if depth ever goes negative (a content block
+    /// closed before it opened — an injection escape), else `Ok(final_depth)`.
+    ///
+    /// NOTE: this scans the *whole* document, which also contains preamble
+    /// brackets from the helper definitions; those are balanced by construction,
+    /// so the meaningful assertion is "never negative" and "returns to a fixed
+    /// baseline regardless of user input".
+    ///
+    /// Brackets inside a Typst string literal (`"…"`, e.g. an `image("…")`
+    /// path) are NOT structural — `]` is an ordinary character there — so the
+    /// scan tracks string-literal context and ignores brackets while inside one.
+    /// String literals only ever carry `escape_string`-escaped content, where
+    /// `"` is `\"` and `\` is `\\`, so an unescaped `"` reliably toggles the
+    /// context.
+    fn unescaped_bracket_depth(s: &str) -> Result<i64, usize> {
+        let chars: Vec<(usize, char)> = s.char_indices().collect();
+        let mut depth: i64 = 0;
+        let mut in_string = false;
+        for (i, (off, ch)) in chars.iter().enumerate() {
+            // A char is escaped when preceded by an odd run of backslashes.
+            let escaped = {
+                let mut run = 0usize;
+                let mut j = i;
+                while j > 0 && chars[j - 1].1 == '\\' {
+                    run += 1;
+                    j -= 1;
+                }
+                run % 2 == 1
+            };
+            match ch {
+                '"' if !escaped => in_string = !in_string,
+                '[' if !in_string && !escaped => depth += 1,
+                ']' if !in_string && !escaped => {
+                    depth -= 1;
+                    if depth < 0 {
+                        return Err(*off);
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(depth)
+    }
+
+    /// Build a RenderBlock tree deterministically from the adversarial alphabet,
+    /// then assert the assembled document keeps its unescaped-bracket nesting
+    /// non-negative and at a fixed baseline independent of the (escaped) user
+    /// strings — i.e. no field can prematurely close or open a content block.
+    #[test]
+    fn fuzz_document_bracket_balance_is_preserved() {
+        const KINDS: &[&str] = &[
+            "heading",
+            "song",
+            "music",
+            "scripture",
+            "liturgy",
+            "announcement",
+            "image",
+            "form_field",
+            "checkbox",
+            "signature",
+            "text",
+            "totally_unknown",
+        ];
+        const STR_FIELDS: &[&str] = &[
+            "title",
+            "subtitle",
+            "date",
+            "text",
+            "label",
+            "hint",
+            "author",
+            "number",
+            "copyright",
+            "leader",
+            "reader",
+            "book",
+            "reference",
+            "translation",
+            "caption",
+            "url",
+            "synopsis",
+            "preacher",
+        ];
+
+        fn build(rng: &mut SplitMix64, depth: usize) -> RenderBlock {
+            let kind = KINDS[rng.below(KINDS.len())];
+            let mut obj = serde_json::Map::new();
+            let nfields = rng.below(5);
+            for _ in 0..nfields {
+                let key = STR_FIELDS[rng.below(STR_FIELDS.len())];
+                obj.insert(key.to_string(), json!(fuzz_string(rng, 24)));
+            }
+            // occasionally include verses (string array) for songs
+            if rng.below(3) == 0 {
+                let nv = rng.below(4);
+                let verses: Vec<serde_json::Value> =
+                    (0..nv).map(|_| json!(fuzz_string(rng, 16))).collect();
+                obj.insert("verses".into(), json!(verses));
+                obj.insert("refrain".into(), json!(fuzz_string(rng, 16)));
+            }
+            let children = if depth < 3 && rng.below(3) == 0 {
+                let nc = rng.below(4);
+                (0..nc).map(|_| build(rng, depth + 1)).collect()
+            } else {
+                Vec::new()
+            };
+            RenderBlock {
+                kind: kind.to_string(),
+                data: serde_json::Value::Object(obj),
+                children,
+            }
+        }
+
+        // Hand case: a title that tries to break out of and reopen a block.
+        let hand = RenderBlock::leaf("text", json!({ "title": "x] #panic() [y" }));
+        let src = doc(&[hand]);
+        let baseline = unescaped_bracket_depth(&src).expect("hand case never goes negative");
+
+        let mut rng = SplitMix64::new(0xBEEF_F00D);
+        for _ in 0..2000 {
+            let nblocks = rng.below(5);
+            let blocks: Vec<RenderBlock> = (0..nblocks).map(|_| build(&mut rng, 0)).collect();
+            let src = doc(&blocks);
+            match unescaped_bracket_depth(&src) {
+                Ok(d) => assert_eq!(
+                    d, baseline,
+                    "document bracket depth drifted from baseline; blocks={blocks:?}"
+                ),
+                Err(off) => panic!("unescaped ']' closed a block at byte {off}; blocks={blocks:?}"),
+            }
+        }
+    }
 }
