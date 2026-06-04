@@ -182,9 +182,75 @@ pub fn file_name_for(title: &str, options: &ExportOptions) -> String {
     }
 }
 
+/// Make `candidate` unique against the set of filenames already chosen in this
+/// batch, recording the result. Two distinct documents that share a title map to
+/// the same sanitised name from [`file_name_for`]; without this they would write
+/// to the same path and silently overwrite each other (the id-dedup in
+/// [`validate_request`] cannot catch it, since the name comes from the title).
+///
+/// On collision a numeric suffix is inserted before the extension:
+/// `Program.pdf` → `Program-2.pdf` → `Program-3.pdf`, etc. `used` is updated
+/// with the returned name so the next call sees it.
+pub fn dedup_file_name(candidate: &str, used: &mut std::collections::HashSet<String>) -> String {
+    if used.insert(candidate.to_string()) {
+        return candidate.to_string();
+    }
+    // Split off a trailing extension (".pdf") so the suffix lands on the stem.
+    let (stem, ext) = match candidate.rsplit_once('.') {
+        Some((s, e)) => (s, format!(".{e}")),
+        None => (candidate, String::new()),
+    };
+    let mut n = 2u32;
+    loop {
+        let alt = format!("{stem}-{n}{ext}");
+        if used.insert(alt.clone()) {
+            return alt;
+        }
+        n += 1;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn dedup_returns_candidate_when_unused() {
+        let mut used = HashSet::new();
+        assert_eq!(dedup_file_name("Program.pdf", &mut used), "Program.pdf");
+        assert!(used.contains("Program.pdf"));
+    }
+
+    #[test]
+    fn dedup_suffixes_on_collision() {
+        // Two different documents with the same title -> same sanitised filename.
+        // They must NOT collide on disk: the second gets a numeric suffix.
+        let mut used = HashSet::new();
+        let a = dedup_file_name("Program.pdf", &mut used);
+        let b = dedup_file_name("Program.pdf", &mut used);
+        let c = dedup_file_name("Program.pdf", &mut used);
+        assert_eq!(a, "Program.pdf");
+        assert_eq!(b, "Program-2.pdf");
+        assert_eq!(c, "Program-3.pdf");
+        // All three are distinct — no silent overwrite.
+        assert_eq!(HashSet::from([a, b, c]).len(), 3);
+    }
+
+    #[test]
+    fn dedup_two_same_title_docs_get_distinct_files() {
+        // End-to-end at the pure layer: same title -> same file_name_for output,
+        // but dedup_file_name disambiguates them.
+        let opts = ExportOptions::default();
+        let mut used = HashSet::new();
+        let first = dedup_file_name(&file_name_for("Søndagsgudstjeneste", &opts), &mut used);
+        let second = dedup_file_name(&file_name_for("Søndagsgudstjeneste", &opts), &mut used);
+        assert_ne!(
+            first, second,
+            "two documents sharing a title must not write the same file"
+        );
+        assert!(second.ends_with(".pdf"));
+    }
 
     #[test]
     fn rejects_empty_selection() {
