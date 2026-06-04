@@ -186,7 +186,7 @@ describe("ExportPage", () => {
     await waitFor(() =>
       expect(ipcMock.exporter.batch).toHaveBeenCalledWith(
         ["doc-a"],
-        { paper: null, largePrintPercent: null, lang: null },
+        { paper: null, largePrintPercent: null, lang: null, theme: null },
         "/tmp/out",
       ),
     );
@@ -210,7 +210,7 @@ describe("ExportPage", () => {
     await waitFor(() =>
       expect(ipcMock.exporter.batch).toHaveBeenCalledWith(
         ["doc-a"],
-        { paper: null, largePrintPercent: 200, lang: null },
+        { paper: null, largePrintPercent: 200, lang: null, theme: null },
         "/tmp/out",
       ),
     );
@@ -243,7 +243,14 @@ describe("ExportPage", () => {
     );
 
     await waitFor(() =>
-      expect(ipcMock.bulletin.render).toHaveBeenCalledWith("doc-a"),
+      // The preview passes a LayoutMeta so the chosen branding (here: none →
+      // theme null) and the document's own page size flow into the render.
+      expect(ipcMock.bulletin.render).toHaveBeenCalledWith("doc-a", {
+        paper: "a4",
+        font_size_pt: 11,
+        lang: null,
+        theme: null,
+      }),
     );
     await waitFor(() =>
       expect(ipcMock.bulletin.typstCompile).toHaveBeenCalledWith(

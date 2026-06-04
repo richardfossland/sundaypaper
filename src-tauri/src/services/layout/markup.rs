@@ -43,6 +43,13 @@ pub struct LayoutMeta {
     pub font_size_pt: f64,
     /// Optional default language for Typst hyphenation (`en`, `nb`, `de`, …).
     pub lang: Option<String>,
+    /// Optional per-church branding (fonts / accent colour / heading weight /
+    /// spacing). `None` means "house default": the preamble is then emitted
+    /// byte-for-byte as it was before themes existed, so an unthemed document is
+    /// completely unchanged. A `Some(theme)` injects the church's look
+    /// consistently into headings, song titles and scripture.
+    #[serde(default)]
+    pub theme: Option<LayoutTheme>,
 }
 
 impl Default for LayoutMeta {
@@ -51,7 +58,145 @@ impl Default for LayoutMeta {
             paper: "a4".into(),
             font_size_pt: 11.0,
             lang: None,
+            theme: None,
         }
+    }
+}
+
+/// Per-church branding applied to the document preamble. Every field is optional
+/// so a partial theme (just an accent colour, say) still works and the rest of
+/// the look stays at the house default. The values that reach Typst as raw
+/// identifiers — font names and the accent colour — are validated/escaped by
+/// [`LayoutTheme::resolve`] so a theme can never inject markup or break the
+/// compile (a bad value silently falls back to the house default for that one
+/// field; the document still renders).
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, Default)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/lib/bindings/LayoutTheme.ts")]
+pub struct LayoutTheme {
+    /// Font family for headings / song titles / the service title. A free-text
+    /// font name; validated to a safe character set before it reaches Typst.
+    #[serde(default)]
+    pub heading_font: Option<String>,
+    /// Font family for body text (paragraphs, lyrics, scripture). Validated like
+    /// `heading_font`.
+    #[serde(default)]
+    pub body_font: Option<String>,
+    /// Accent colour used for headings / rules — a `#rrggbb` (or `#rgb`) hex
+    /// string. Validated to a strict hex form before it reaches Typst's `rgb()`.
+    #[serde(default)]
+    pub accent_color: Option<String>,
+    /// Heading weight keyword (`regular` / `medium` / `semibold` / `bold` /
+    /// `black`). Only this fixed set is accepted; anything else falls back to the
+    /// house default `bold`.
+    #[serde(default)]
+    pub heading_weight: Option<String>,
+    /// Multiplier on the baseline paragraph leading (line spacing). `1.0` is the
+    /// house default; clamped to a sane 0.5–3.0 range so a theme can't collapse
+    /// or explode the layout.
+    #[serde(default)]
+    pub spacing_multiplier: Option<f64>,
+}
+
+/// The house defaults a theme overrides — kept as named constants so the "no
+/// theme → byte-identical" regression pin is obvious and a partial theme falls
+/// back to exactly these.
+const DEFAULT_HEADING_FONT: &str = "linux libertine";
+const DEFAULT_BODY_FONT: &str = "linux libertine";
+const DEFAULT_ACCENT: &str = "rgb(\"#000000\")";
+const DEFAULT_HEADING_WEIGHT: &str = "bold";
+const DEFAULT_LEADING_EM: f64 = 0.65;
+
+/// A theme resolved to ready-to-inject Typst fragments. Every field is already
+/// validated/escaped (font names to a safe identifier, the accent to a
+/// `rgb("#…")` literal), so the preamble formatter can drop them straight in.
+struct ResolvedTheme {
+    heading_font: String,
+    body_font: String,
+    accent: String,
+    heading_weight: String,
+    leading_em: f64,
+}
+
+impl LayoutTheme {
+    /// Validate + resolve this theme against the house defaults. Each field that
+    /// is absent, blank, or fails validation falls back to its house default, so
+    /// the result is always a complete, injection-safe set of fragments.
+    fn resolve(&self) -> ResolvedTheme {
+        ResolvedTheme {
+            heading_font: self
+                .heading_font
+                .as_deref()
+                .and_then(sanitize_font_name)
+                .unwrap_or_else(|| DEFAULT_HEADING_FONT.to_string()),
+            body_font: self
+                .body_font
+                .as_deref()
+                .and_then(sanitize_font_name)
+                .unwrap_or_else(|| DEFAULT_BODY_FONT.to_string()),
+            accent: self
+                .accent_color
+                .as_deref()
+                .and_then(sanitize_hex_color)
+                .map(|hex| format!("rgb(\"{hex}\")"))
+                .unwrap_or_else(|| DEFAULT_ACCENT.to_string()),
+            heading_weight: self
+                .heading_weight
+                .as_deref()
+                .and_then(sanitize_weight)
+                .unwrap_or_else(|| DEFAULT_HEADING_WEIGHT.to_string()),
+            leading_em: DEFAULT_LEADING_EM * clamp_spacing(self.spacing_multiplier),
+        }
+    }
+}
+
+/// Validate a user-supplied font family name. Typst takes the family as a string
+/// literal, so the only hard requirement is escaping; but to keep a theme from
+/// smuggling odd control content we also restrict to a sane printable set
+/// (letters, digits, space, and a few punctuation marks fonts actually use).
+/// Returns the trimmed name when acceptable, else `None` (→ house default).
+fn sanitize_font_name(raw: &str) -> Option<String> {
+    let name = raw.trim();
+    if name.is_empty() || name.len() > 64 {
+        return None;
+    }
+    let ok = name
+        .chars()
+        .all(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.' | '+' | '\''));
+    ok.then(|| name.to_string())
+}
+
+/// Validate a `#rgb` / `#rrggbb` hex colour. Returns the canonical lowercase
+/// `#rrggbb`/`#rgb` string (with a leading `#`) when valid, else `None`.
+/// Strict — only the hash and hex digits — so nothing else can reach Typst.
+fn sanitize_hex_color(raw: &str) -> Option<String> {
+    let s = raw.trim();
+    let hex = s.strip_prefix('#')?;
+    if !(hex.len() == 3 || hex.len() == 6) || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(format!("#{}", hex.to_ascii_lowercase()))
+}
+
+/// Map a heading-weight keyword to a Typst weight string. Only the fixed set is
+/// accepted (no expression injection); unknown → `None` (→ house default).
+fn sanitize_weight(raw: &str) -> Option<String> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "regular" => Some("regular".to_string()),
+        "medium" => Some("medium".to_string()),
+        "semibold" => Some("semibold".to_string()),
+        "bold" => Some("bold".to_string()),
+        "black" => Some("black".to_string()),
+        _ => None,
+    }
+}
+
+/// Clamp the spacing multiplier into a sane range; absent / non-finite → 1.0
+/// (the house default, which reproduces the original leading exactly).
+fn clamp_spacing(m: Option<f64>) -> f64 {
+    match m {
+        Some(v) if v.is_finite() => v.clamp(0.5, 3.0),
+        _ => 1.0,
     }
 }
 
@@ -119,19 +264,56 @@ fn preamble(meta: &LayoutMeta) -> String {
         Some(lang) => format!(", lang: \"{}\"", escape_string(lang)),
         None => String::new(),
     };
+
+    // Theme-derived fragments. With no theme every fragment collapses to the
+    // historical literal/empty form so the preamble is byte-identical to the
+    // pre-theme output (regression-pinned). With a theme they carry the
+    // church's fonts / accent / weight / leading. All values reaching Typst are
+    // already validated/escaped by `LayoutTheme::resolve`.
+    let theme = meta.theme.as_ref().map(LayoutTheme::resolve);
+    // `font: "…"` clauses, injected into `#set text` (body) and the heading
+    // helpers' `#text(...)` calls. Empty when no theme OR when the resolved font
+    // is still the house default (a partial theme that doesn't touch fonts must
+    // leave these lines byte-identical to the unthemed output).
+    let body_font_clause = match &theme {
+        Some(t) if t.body_font != DEFAULT_BODY_FONT => {
+            format!(", font: \"{}\"", escape_string(&t.body_font))
+        }
+        _ => String::new(),
+    };
+    let heading_font_clause = match &theme {
+        Some(t) if t.heading_font != DEFAULT_HEADING_FONT => {
+            format!("font: \"{}\", ", escape_string(&t.heading_font))
+        }
+        _ => String::new(),
+    };
+    // The leading value: `0.65em` at the house default, scaled by the theme's
+    // spacing multiplier otherwise. `format_em` keeps the no-theme case as the
+    // exact literal `0.65`.
+    let leading = format_em(theme.as_ref().map_or(DEFAULT_LEADING_EM, |t| t.leading_em));
+    // Heading weight — `"bold"` by default, the theme's keyword otherwise.
+    let weight = theme
+        .as_ref()
+        .map_or(DEFAULT_HEADING_WEIGHT, |t| t.heading_weight.as_str());
+    // Accent fill on headings/title — empty (no fill) at the house default so
+    // the original output is unchanged; `, fill: rgb("#…")` with a theme.
+    let accent_clause = match &theme {
+        Some(t) if t.accent != DEFAULT_ACCENT => format!(", fill: {}", t.accent),
+        _ => String::new(),
+    };
     format!(
         "// Generated by SundayPaper — do not edit by hand.\n\
          #set page(paper: \"{paper}\", margin: 2cm)\n\
-         #set text(size: {size}pt{lang_line})\n\
-         #set par(justify: false, leading: 0.65em)\n\n\
+         #set text(size: {size}pt{lang_line}{body_font_clause})\n\
+         #set par(justify: false, leading: {leading}em)\n\n\
          // --- reusable helpers ---\n\
          #let bp-title(t, sub: none, date: none) = {{\n  \
-             align(center)[#text(size: 1.6em, weight: \"bold\")[#t]]\n  \
+             align(center)[#text({heading_font_clause}size: 1.6em, weight: \"{weight}\"{accent_clause})[#t]]\n  \
              if sub != none {{ align(center)[#text(size: 1.1em)[#sub]] }}\n  \
              if date != none {{ align(center)[#emph[#date]] }}\n  \
              v(0.4em); line(length: 100%); v(0.6em)\n\
          }}\n\
-         #let bp-heading(t) = [#v(0.5em)#text(size: 1.2em, weight: \"bold\")[#t]#v(0.2em)]\n\
+         #let bp-heading(t) = [#v(0.5em)#text({heading_font_clause}size: 1.2em, weight: \"{weight}\"{accent_clause})[#t]#v(0.2em)]\n\
          #let bp-byline(who) = if who != none {{ text(size: 0.85em, style: \"italic\")[#who] }}\n\
          #let bp-time(t) = if t != none {{ box(width: 3em)[#text(fill: gray)[#t]] }}\n\
          // Lyric helpers: a numbered verse and an indented, italic refrain so a\n\
@@ -737,6 +919,24 @@ fn clamp_font_size(pt: f64) -> f64 {
     }
 }
 
+/// Format an `em` length value deterministically for the preamble. Rounds to at
+/// most three decimals and trims trailing zeros, so the house default `0.65`
+/// prints as exactly `0.65` (byte-identical to the pre-theme literal) and a
+/// scaled value like `0.65 * 1.5 = 0.975` prints cleanly without float noise.
+fn format_em(value: f64) -> String {
+    // Round to 3 decimals to kill binary-float jitter, then strip trailing
+    // zeros / a dangling dot.
+    let rounded = (value * 1000.0).round() / 1000.0;
+    let mut s = format!("{rounded:.3}");
+    while s.ends_with('0') {
+        s.pop();
+    }
+    if s.ends_with('.') {
+        s.pop();
+    }
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -762,6 +962,7 @@ mod tests {
             paper: "tabloid".into(),
             font_size_pt: 500.0,
             lang: Some("nb".into()),
+            ..LayoutMeta::default()
         };
         let src = build_typst_document(&meta, &[]);
         assert!(src.contains("paper: \"a4\""));
@@ -1595,6 +1796,221 @@ mod tests {
         assert!(
             src.lines().any(|l| l.trim() == "#par[child line]"),
             "child renders as a flat sibling line"
+        );
+    }
+
+    // --- typography / theme system (Step 3) -----------------------------------
+
+    #[test]
+    fn no_theme_preamble_is_byte_identical_to_pre_theme_output() {
+        // Regression pin: a LayoutMeta with theme None must produce EXACTLY the
+        // historical preamble — fonts/accent unset, leading 0.65em, weight bold.
+        let meta = LayoutMeta::default();
+        assert_eq!(meta.theme, None, "default theme is None");
+        let src = build_typst_document(&meta, &[]);
+        // The exact lines that the theme machinery could have perturbed.
+        assert!(
+            src.contains("#set text(size: 11pt)\n"),
+            "no font clause added"
+        );
+        assert!(
+            src.contains("#set par(justify: false, leading: 0.65em)\n"),
+            "leading is the literal 0.65em"
+        );
+        assert!(
+            src.contains(
+                "#let bp-heading(t) = [#v(0.5em)#text(size: 1.2em, weight: \"bold\")[#t]#v(0.2em)]\n"
+            ),
+            "heading helper unchanged (no font, no fill, weight bold)"
+        );
+        assert!(
+            src.contains("align(center)[#text(size: 1.6em, weight: \"bold\")[#t]]"),
+            "title helper unchanged"
+        );
+    }
+
+    fn themed(theme: LayoutTheme) -> String {
+        let meta = LayoutMeta {
+            theme: Some(theme),
+            ..LayoutMeta::default()
+        };
+        build_typst_document(&meta, &[])
+    }
+
+    #[test]
+    fn theme_injects_body_font_into_set_text() {
+        let src = themed(LayoutTheme {
+            body_font: Some("EB Garamond".into()),
+            ..Default::default()
+        });
+        assert!(src.contains("#set text(size: 11pt, font: \"EB Garamond\")"));
+    }
+
+    #[test]
+    fn theme_injects_heading_font_and_weight_into_helpers() {
+        let src = themed(LayoutTheme {
+            heading_font: Some("Montserrat".into()),
+            heading_weight: Some("black".into()),
+            ..Default::default()
+        });
+        // Both the title and the section-heading helper pick up the font + weight.
+        assert!(src.contains(
+            "align(center)[#text(font: \"Montserrat\", size: 1.6em, weight: \"black\")[#t]]"
+        ));
+        assert!(src.contains(
+            "#let bp-heading(t) = [#v(0.5em)#text(font: \"Montserrat\", size: 1.2em, weight: \"black\")[#t]#v(0.2em)]"
+        ));
+    }
+
+    #[test]
+    fn theme_injects_accent_fill_on_headings() {
+        let src = themed(LayoutTheme {
+            accent_color: Some("#C81E2D".into()),
+            ..Default::default()
+        });
+        // Accent reaches both heading helpers as a validated rgb() fill, lowered.
+        assert!(src.contains("weight: \"bold\", fill: rgb(\"#c81e2d\"))[#t]"));
+        assert!(src.contains(
+            "#let bp-heading(t) = [#v(0.5em)#text(size: 1.2em, weight: \"bold\", fill: rgb(\"#c81e2d\"))[#t]#v(0.2em)]"
+        ));
+    }
+
+    #[test]
+    fn theme_spacing_multiplier_scales_leading_deterministically() {
+        // 0.65em * 1.5 = 0.975em, printed cleanly without float noise.
+        let src = themed(LayoutTheme {
+            spacing_multiplier: Some(1.5),
+            ..Default::default()
+        });
+        assert!(src.contains("#set par(justify: false, leading: 0.975em)"));
+        // 0.65 * 2.0 = 1.3em.
+        let src2 = themed(LayoutTheme {
+            spacing_multiplier: Some(2.0),
+            ..Default::default()
+        });
+        assert!(src2.contains("leading: 1.3em"));
+    }
+
+    #[test]
+    fn theme_spacing_multiplier_is_clamped() {
+        // Below the floor → 0.5x; above the ceiling → 3x. NaN → 1.0 (default).
+        let lo = themed(LayoutTheme {
+            spacing_multiplier: Some(0.0),
+            ..Default::default()
+        });
+        assert!(lo.contains("leading: 0.325em"), "clamped to 0.5x"); // 0.65*0.5
+        let hi = themed(LayoutTheme {
+            spacing_multiplier: Some(100.0),
+            ..Default::default()
+        });
+        assert!(hi.contains("leading: 1.95em"), "clamped to 3x"); // 0.65*3
+        let nan = themed(LayoutTheme {
+            spacing_multiplier: Some(f64::NAN),
+            ..Default::default()
+        });
+        assert!(nan.contains("leading: 0.65em"), "NaN → no scaling");
+    }
+
+    #[test]
+    fn malicious_font_name_falls_back_to_house_default() {
+        // A font name carrying quotes / markup must never reach Typst raw; an
+        // unacceptable name silently drops to the house default (no font clause).
+        let src = themed(LayoutTheme {
+            body_font: Some("Evil\"); #panic() //".into()),
+            heading_font: Some("a\"b".into()),
+            ..Default::default()
+        });
+        // No injected quote/markup survived; the set-text line stays unfonted.
+        assert!(
+            src.contains("#set text(size: 11pt)\n"),
+            "bad body font → no font clause, line unchanged"
+        );
+        assert!(!src.contains("#panic"), "no markup injected");
+        assert!(
+            src.contains("#text(size: 1.6em, weight: \"bold\")[#t]]"),
+            "bad heading font → helper stays at default (no font clause)"
+        );
+    }
+
+    #[test]
+    fn malicious_accent_color_falls_back_to_no_fill() {
+        // A non-hex accent must not reach rgb(); it falls back to the house
+        // default (no fill), so headings render plain rather than injected.
+        let src = themed(LayoutTheme {
+            accent_color: Some("red\"); #panic()".into()),
+            ..Default::default()
+        });
+        // No accent rgb() fill reached the headings (the only `fill:` that may
+        // appear are the unrelated house `fill: gray`/`fill: luma(...)` ones).
+        assert!(!src.contains("fill: rgb("), "invalid accent → no rgb fill");
+        // And the heading helpers stay at the unthemed form (no fill clause).
+        assert!(
+            src.contains("#text(size: 1.2em, weight: \"bold\")[#t]"),
+            "heading helper unchanged"
+        );
+        assert!(!src.contains("#panic"), "no markup injected");
+    }
+
+    #[test]
+    fn unknown_heading_weight_falls_back_to_bold() {
+        let src = themed(LayoutTheme {
+            heading_weight: Some("ultralight-injection\"".into()),
+            ..Default::default()
+        });
+        assert!(src.contains("weight: \"bold\""), "unknown weight → bold");
+        assert!(!src.contains("ultralight"), "raw value never reaches Typst");
+    }
+
+    #[test]
+    fn three_digit_hex_accent_is_accepted() {
+        let src = themed(LayoutTheme {
+            accent_color: Some("#FA0".into()),
+            ..Default::default()
+        });
+        assert!(src.contains("fill: rgb(\"#fa0\")"));
+    }
+
+    #[test]
+    fn partial_theme_keeps_house_defaults_for_unset_fields() {
+        // Only an accent set: fonts/weight/leading stay at the house default.
+        let src = themed(LayoutTheme {
+            accent_color: Some("#123456".into()),
+            ..Default::default()
+        });
+        assert!(src.contains("#set text(size: 11pt)\n"), "no body font");
+        assert!(src.contains("leading: 0.65em"), "default leading");
+        assert!(
+            src.contains("weight: \"bold\", fill: rgb(\"#123456\"))[#t]"),
+            "weight default + accent applied"
+        );
+    }
+
+    #[test]
+    fn themed_document_still_keeps_bracket_balance() {
+        // A theme touches only the preamble; the document must stay at the same
+        // unescaped-bracket baseline as the unthemed one (no theme value leaks a
+        // structural bracket into the markup).
+        let theme = LayoutTheme {
+            heading_font: Some("Noto Serif".into()),
+            body_font: Some("Noto Sans".into()),
+            accent_color: Some("#abcdef".into()),
+            heading_weight: Some("semibold".into()),
+            spacing_multiplier: Some(1.25),
+        };
+        let blocks = [RenderBlock::leaf(
+            "heading",
+            json!({ "role": "service-title", "title": "Gudstjeneste", "subtitle": "St. Olav" }),
+        )];
+        let themed_meta = LayoutMeta {
+            theme: Some(theme),
+            ..LayoutMeta::default()
+        };
+        let src = build_typst_document(&themed_meta, &blocks);
+        let plain = build_typst_document(&LayoutMeta::default(), &blocks);
+        assert_eq!(
+            unescaped_bracket_depth(&src),
+            unescaped_bracket_depth(&plain),
+            "theme injection keeps the document bracket-balanced"
         );
     }
 
