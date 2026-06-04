@@ -293,8 +293,20 @@ export const docTemplate = {
     }),
   get: (id: string) => call<DocTemplate>("doc_template_get", { id }),
   list: (kind?: string) => call<DocTemplate[]>("doc_template_list", { kind }),
-  update: (id: string, name: string, kind: string, typstSource: string) =>
-    call<DocTemplate>("doc_template_update", { id, name, kind, typstSource }),
+  update: (
+    id: string,
+    name: string,
+    kind: string,
+    typstSource: string,
+    variables?: TemplateVarInput[],
+  ) =>
+    call<DocTemplate>("doc_template_update", {
+      id,
+      name,
+      kind,
+      typstSource,
+      variables,
+    }),
   delete: (id: string) => call<void>("doc_template_delete", { id }),
   /** Render a template by substituting {{VAR}} placeholders. Returns Typst source. */
   render: (id: string, vars: Record<string, string>) =>

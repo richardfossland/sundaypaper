@@ -311,19 +311,34 @@ impl DocTemplateRepo {
 
     // ── Update ────────────────────────────────────────────────────────────────
 
-    /// Update the header fields of a template (does not touch variables).
+    /// Update a template's header fields AND replace its variable spec.
+    ///
+    /// Header and variables move together as one atomic unit (same posture as
+    /// `create`): the existing `template_var` rows are deleted and the supplied
+    /// list re-inserted inside a single transaction, so a bad variable kind
+    /// anywhere rolls the whole update back and the old variables survive
+    /// untouched. All variable kinds are validated up front, before any write.
     pub async fn update(
         &self,
         id: &str,
         name: &str,
         kind: &str,
         typst_source: &str,
+        variables: &[TemplateVarInput],
     ) -> AppResult<DocTemplate> {
         let name = name.trim();
         if name.is_empty() {
             return Err(AppError::Validation("template name is required".into()));
         }
         DocTemplateKind::parse(kind)?;
+        // Validate ALL variable kinds before touching the DB — a bad var must
+        // never leave the template half-rewritten.
+        for var in variables {
+            TemplateVarKind::parse(&var.kind)?;
+        }
+
+        let now = now_ms();
+        let mut tx = self.db.pool.begin().await?;
 
         let affected = sqlx::query(
             "UPDATE doc_template \
@@ -333,18 +348,47 @@ impl DocTemplateRepo {
         .bind(name)
         .bind(kind)
         .bind(typst_source)
-        .bind(now_ms())
+        .bind(now)
         .bind(id)
-        .execute(&self.db.pool)
+        .execute(&mut *tx)
         .await?
         .rows_affected();
 
         if affected == 0 {
+            // Roll the (empty) tx back and report the template as missing.
+            tx.rollback().await?;
             return Err(AppError::NotFound {
                 entity: "doc_template",
                 id: id.to_string(),
             });
         }
+
+        // Replace the variable set: drop the old rows, reinsert the new ones.
+        sqlx::query("DELETE FROM template_var WHERE template_id = ?")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        for (pos, var) in variables.iter().enumerate() {
+            let var_id = Uuid::now_v7().to_string();
+            sqlx::query(
+                "INSERT INTO template_var \
+                     (id, template_id, name, label, kind, default_value, required, position, created_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(&var_id)
+            .bind(id)
+            .bind(&var.name)
+            .bind(&var.label)
+            .bind(&var.kind)
+            .bind(&var.default_value)
+            .bind(if var.required { 1i64 } else { 0i64 })
+            .bind(pos as i64)
+            .bind(now)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+
         self.get(id).await
     }
 
@@ -375,11 +419,7 @@ impl DocTemplateRepo {
     /// supplied values. Returns the rendered source string (not compiled PDF).
     /// Missing required variables cause a `Validation` error. Unknown variables
     /// in `vars` are silently ignored (forward-compat).
-    pub async fn render(
-        &self,
-        id: &str,
-        vars: &HashMap<String, String>,
-    ) -> AppResult<String> {
+    pub async fn render(&self, id: &str, vars: &HashMap<String, String>) -> AppResult<String> {
         let tmpl = self.get(id).await?;
 
         // Check required variables are supplied.
@@ -498,7 +538,12 @@ fn row_to_var(row: TemplateVarRow) -> TemplateVar {
 // ── Built-in template seed data ───────────────────────────────────────────────
 
 /// Returns (name, kind_str, typst_source, variables) for each builtin template.
-fn builtin_templates() -> Vec<(&'static str, &'static str, &'static str, Vec<TemplateVarInput>)> {
+fn builtin_templates() -> Vec<(
+    &'static str,
+    &'static str,
+    &'static str,
+    Vec<TemplateVarInput>,
+)> {
     vec![
         (
             "Gudstjeneste-program (standard)",
@@ -938,7 +983,9 @@ mod tests {
     async fn list_returns_all_live_sorted() {
         let repo = repo().await;
         repo.create("Zzz template", "Form", "", &[]).await.unwrap();
-        repo.create("Aaa template", "Poster", "", &[]).await.unwrap();
+        repo.create("Aaa template", "Poster", "", &[])
+            .await
+            .unwrap();
         let list = repo.list(None).await.unwrap();
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].name, "Aaa template");
@@ -961,9 +1008,12 @@ mod tests {
     #[tokio::test]
     async fn update_changes_fields() {
         let repo = repo().await;
-        let tmpl = repo.create("Old name", "Form", "// old", &[]).await.unwrap();
+        let tmpl = repo
+            .create("Old name", "Form", "// old", &[])
+            .await
+            .unwrap();
         let updated = repo
-            .update(&tmpl.id, "New name", "Poster", "// new source")
+            .update(&tmpl.id, "New name", "Poster", "// new source", &[])
             .await
             .unwrap();
         assert_eq!(updated.name, "New name");
@@ -975,20 +1025,158 @@ mod tests {
     async fn update_not_found() {
         let repo = repo().await;
         assert!(matches!(
-            repo.update("no-such-id", "X", "Bulletin", "")
+            repo.update("no-such-id", "X", "Bulletin", "", &[])
                 .await
                 .unwrap_err(),
             AppError::NotFound { .. }
         ));
     }
 
+    /// update() must REPLACE the variable set: the old vars are dropped and the
+    /// new list reinserted, with positions renumbered to dense `0..N`.
+    #[tokio::test]
+    async fn update_replaces_variables() {
+        let repo = repo().await;
+        let tmpl = repo
+            .create(
+                "With vars",
+                "Bulletin",
+                "{{a}} {{b}}",
+                &[
+                    TemplateVarInput {
+                        name: "a".into(),
+                        label: "A".into(),
+                        kind: "Text".into(),
+                        default_value: None,
+                        required: true,
+                    },
+                    TemplateVarInput {
+                        name: "b".into(),
+                        label: "B".into(),
+                        kind: "Text".into(),
+                        default_value: None,
+                        required: false,
+                    },
+                ],
+            )
+            .await
+            .unwrap();
+        assert_eq!(tmpl.variables.len(), 2);
+
+        // Replace with a single, different variable.
+        let updated = repo
+            .update(
+                &tmpl.id,
+                "With vars",
+                "Bulletin",
+                "{{c}}",
+                &[TemplateVarInput {
+                    name: "c".into(),
+                    label: "C".into(),
+                    kind: "Date".into(),
+                    default_value: Some("2026-01-01".into()),
+                    required: true,
+                }],
+            )
+            .await
+            .unwrap();
+        assert_eq!(updated.variables.len(), 1);
+        assert_eq!(updated.variables[0].name, "c");
+        assert_eq!(updated.variables[0].kind, "Date");
+        assert_eq!(updated.variables[0].position, 0);
+        assert_eq!(
+            updated.variables[0].default_value.as_deref(),
+            Some("2026-01-01")
+        );
+
+        // And the old rows are truly gone — exactly one var row for this tmpl.
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM template_var WHERE template_id = ?")
+                .bind(&tmpl.id)
+                .fetch_one(&repo.db.pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    /// An empty variable list clears all variables.
+    #[tokio::test]
+    async fn update_can_clear_variables() {
+        let repo = repo().await;
+        let tmpl = repo
+            .create(
+                "Has one",
+                "Form",
+                "{{x}}",
+                &[TemplateVarInput {
+                    name: "x".into(),
+                    label: "X".into(),
+                    kind: "Text".into(),
+                    default_value: None,
+                    required: false,
+                }],
+            )
+            .await
+            .unwrap();
+        let updated = repo
+            .update(&tmpl.id, "Has one", "Form", "{{x}}", &[])
+            .await
+            .unwrap();
+        assert!(updated.variables.is_empty());
+    }
+
+    /// A bad variable kind must roll the WHOLE update back: neither the header
+    /// fields nor the variable set may change. This is the atomicity guarantee.
+    #[tokio::test]
+    async fn update_with_bad_var_is_atomic() {
+        let repo = repo().await;
+        let tmpl = repo
+            .create(
+                "Original",
+                "Bulletin",
+                "// orig",
+                &[TemplateVarInput {
+                    name: "keep".into(),
+                    label: "Keep".into(),
+                    kind: "Text".into(),
+                    default_value: None,
+                    required: false,
+                }],
+            )
+            .await
+            .unwrap();
+
+        let err = repo
+            .update(
+                &tmpl.id,
+                "Changed name",
+                "Poster",
+                "// changed",
+                &[TemplateVarInput {
+                    name: "broken".into(),
+                    label: "Broken".into(),
+                    kind: "BadType".into(),
+                    default_value: None,
+                    required: false,
+                }],
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)));
+
+        // Nothing changed: header fields AND the original variable survive.
+        let after = repo.get(&tmpl.id).await.unwrap();
+        assert_eq!(after.name, "Original");
+        assert_eq!(after.kind, "Bulletin");
+        assert_eq!(after.typst_source, "// orig");
+        assert_eq!(after.variables.len(), 1);
+        assert_eq!(after.variables[0].name, "keep");
+    }
+
     #[tokio::test]
     async fn delete_soft_deletes() {
         let repo = repo().await;
-        let tmpl = repo
-            .create("To delete", "Magazine", "", &[])
-            .await
-            .unwrap();
+        let tmpl = repo.create("To delete", "Magazine", "", &[]).await.unwrap();
         repo.delete(&tmpl.id).await.unwrap();
         assert!(repo.list(None).await.unwrap().is_empty());
         assert!(matches!(
@@ -1042,8 +1230,7 @@ mod tests {
 
         let rendered = repo.render(&tmpl.id, &provided).await.unwrap();
         assert_eq!(
-            rendered,
-            "Service: Søndagsgudstjeneste on 2026-06-01",
+            rendered, "Service: Søndagsgudstjeneste on 2026-06-01",
             "title replaced; date falls back to default"
         );
     }
@@ -1106,10 +1293,7 @@ mod tests {
     #[tokio::test]
     async fn preview_png_stored_and_retrieved() {
         let repo = repo().await;
-        let tmpl = repo
-            .create("PNG test", "Bulletin", "", &[])
-            .await
-            .unwrap();
+        let tmpl = repo.create("PNG test", "Bulletin", "", &[]).await.unwrap();
         assert!(tmpl.preview_png.is_none(), "no preview initially");
         let fake_png = vec![0x89u8, 0x50, 0x4e, 0x47]; // PNG magic bytes
         repo.set_preview_png(&tmpl.id, &fake_png).await.unwrap();

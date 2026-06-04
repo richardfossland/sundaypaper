@@ -27,10 +27,7 @@ pub async fn doc_template_create(
 }
 
 #[tauri::command]
-pub async fn doc_template_get(
-    state: State<'_, AppState>,
-    id: String,
-) -> AppResult<DocTemplate> {
+pub async fn doc_template_get(state: State<'_, AppState>, id: String) -> AppResult<DocTemplate> {
     DocTemplateRepo::new(state.db.clone()).get(&id).await
 }
 
@@ -51,17 +48,21 @@ pub async fn doc_template_update(
     name: String,
     kind: String,
     typst_source: String,
+    variables: Option<Vec<TemplateVarInput>>,
 ) -> AppResult<DocTemplate> {
     DocTemplateRepo::new(state.db.clone())
-        .update(&id, &name, &kind, &typst_source)
+        .update(
+            &id,
+            &name,
+            &kind,
+            &typst_source,
+            variables.as_deref().unwrap_or(&[]),
+        )
         .await
 }
 
 #[tauri::command]
-pub async fn doc_template_delete(
-    state: State<'_, AppState>,
-    id: String,
-) -> AppResult<()> {
+pub async fn doc_template_delete(state: State<'_, AppState>, id: String) -> AppResult<()> {
     DocTemplateRepo::new(state.db.clone()).delete(&id).await
 }
 
@@ -81,7 +82,5 @@ pub async fn doc_template_render(
 /// Seed the three built-in templates if not already present.
 #[tauri::command]
 pub async fn doc_template_seed_builtins(state: State<'_, AppState>) -> AppResult<()> {
-    DocTemplateRepo::new(state.db.clone())
-        .seed_builtins()
-        .await
+    DocTemplateRepo::new(state.db.clone()).seed_builtins().await
 }
