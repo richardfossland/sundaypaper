@@ -14,10 +14,12 @@ import {
   Music,
   LayoutTemplate,
   PenSquare,
+  FileStack,
   Scissors,
   FileText,
   ClipboardList,
   Download,
+  History,
   Settings,
   Plus,
   Wand2,
@@ -107,9 +109,19 @@ export function CommandPalette({ onNavigate }: CommandPaletteProps) {
               label="Maler"
             />
             <Item
+              onSelect={() => go("doctemplates")}
+              icon={<FileStack size={14} />}
+              label="Dokumentmaler"
+            />
+            <Item
               onSelect={() => go("splitter")}
               icon={<Scissors size={14} />}
               label="Klipper"
+            />
+            <Item
+              onSelect={() => go("imports")}
+              icon={<History size={14} />}
+              label="Importlogg"
             />
             <Item
               onSelect={() => go("editor")}
