@@ -45,7 +45,11 @@ pub fn info(path: &Path) -> AppResult<PdfInfo> {
     })
 }
 
-/// Write a new PDF containing only `selection` (1-based), in document order.
+/// Write a new PDF containing only `selection` (1-based), **in the order
+/// given**. `delete_pages` alone only removes pages — it never reorders the
+/// survivors — so after deleting we rebuild the Pages `Kids` array in the
+/// requested order. This honours the documented contract that
+/// `extract(&[3, 1])` yields page 3 followed by page 1.
 pub fn extract(path: &Path, selection: &[u32], out: &Path) -> AppResult<()> {
     let mut doc = load(path)?;
     let total = page_count(&doc);
@@ -56,8 +60,58 @@ pub fn extract(path: &Path, selection: &[u32], out: &Path) -> AppResult<()> {
             "selection would remove every page".into(),
         ));
     }
+
+    // Map each original 1-based page number to its ObjectId *before* deleting,
+    // so we can re-emit the survivors in the requested order afterwards.
+    let original_pages = doc.get_pages();
+    let ordered_ids: Vec<ObjectId> = selection
+        .iter()
+        .filter_map(|n| original_pages.get(n).copied())
+        // De-dup while preserving first-seen order (a selection may repeat a
+        // page; parse_page_selection already drops dupes, but be defensive).
+        .fold(Vec::new(), |mut acc, id| {
+            if !acc.contains(&id) {
+                acc.push(id);
+            }
+            acc
+        });
+
     doc.delete_pages(&to_delete);
+
+    // Reorder the Pages node's Kids to match the requested order. The page
+    // ObjectIds survive `delete_pages` unchanged; only the tree links change.
+    reorder_pages(&mut doc, &ordered_ids)?;
+
     doc.save(out).map_err(pdf_err)?;
+    Ok(())
+}
+
+/// Rewrite the root Pages node's `Kids` array to the given page ObjectIds, in
+/// order, leaving `Count` consistent. Used by `extract` to honour the requested
+/// page order (lopdf's `delete_pages` preserves original order otherwise).
+fn reorder_pages(doc: &mut Document, ordered_ids: &[ObjectId]) -> AppResult<()> {
+    let root = doc
+        .trailer
+        .get(b"Root")
+        .and_then(Object::as_reference)
+        .map_err(pdf_err)?;
+    let pages_ref = doc
+        .get_object(root)
+        .and_then(Object::as_dict)
+        .and_then(|d| d.get(b"Pages"))
+        .and_then(Object::as_reference)
+        .map_err(pdf_err)?;
+    let kids: Vec<Object> = ordered_ids
+        .iter()
+        .map(|id| Object::Reference(*id))
+        .collect();
+    let pages_dict = doc
+        .get_object_mut(pages_ref)
+        .map_err(pdf_err)?
+        .as_dict_mut()
+        .map_err(pdf_err)?;
+    pages_dict.set("Count", Object::Integer(kids.len() as i64));
+    pages_dict.set("Kids", Object::Array(kids));
     Ok(())
 }
 
@@ -254,6 +308,32 @@ mod tests {
             });
             kids.push(page_id.into());
         }
+        finish_pdf(&mut doc, path, pages_id, kids);
+    }
+
+    /// Build an `n`-page PDF where page `i` (1-based) has a distinctive MediaBox
+    /// width of `100 + i` points, so a test can identify which original page
+    /// ended up at each output position (content/order verification).
+    fn build_marked_pdf(path: &Path, n: u32) {
+        let mut doc = Document::with_version("1.5");
+        let pages_id = doc.new_object_id();
+        let mut kids = Vec::new();
+        for i in 1..=n {
+            let content = Content { operations: vec![] };
+            let content_id = doc.add_object(Stream::new(dictionary! {}, content.encode().unwrap()));
+            let width = (100 + i) as i64;
+            let page_id = doc.add_object(dictionary! {
+                "Type" => "Page",
+                "Parent" => pages_id,
+                "Contents" => content_id,
+                "MediaBox" => vec![0.into(), 0.into(), width.into(), 842.into()],
+            });
+            kids.push(page_id.into());
+        }
+        finish_pdf(&mut doc, path, pages_id, kids);
+    }
+
+    fn finish_pdf(doc: &mut Document, path: &Path, pages_id: ObjectId, kids: Vec<Object>) {
         let count = kids.len() as i64;
         doc.objects.insert(
             pages_id,
@@ -273,6 +353,20 @@ mod tests {
 
     fn count_pages(path: &Path) -> u32 {
         Document::load(path).expect("load").get_pages().len() as u32
+    }
+
+    /// Read the MediaBox widths of every page in document (Kids) order — the
+    /// marker `build_marked_pdf` writes, used to assert page *order*.
+    fn page_widths(path: &Path) -> Vec<f64> {
+        let doc = Document::load(path).expect("load");
+        doc.get_pages()
+            .values()
+            .map(|id| {
+                let dict = doc.get_object(*id).unwrap().as_dict().unwrap();
+                let mb = dict.get(b"MediaBox").unwrap().as_array().unwrap();
+                number(&mb[2]).unwrap()
+            })
+            .collect()
     }
 
     #[test]
@@ -295,6 +389,24 @@ mod tests {
         build_pdf(&src, 5);
         extract(&src, &[2, 4], &out).unwrap();
         assert_eq!(count_pages(&out), 2);
+    }
+
+    #[test]
+    fn extract_honours_requested_page_order() {
+        // pdf_ops::extract_pages and parse_page_selection both document that the
+        // selection order is preserved: extracting [3, 1] must yield page 3 then
+        // page 1. Pages carry distinctive MediaBox widths (101/102/103) so we can
+        // tell which original page landed at each output slot.
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("in.pdf");
+        let out = dir.path().join("out.pdf");
+        build_marked_pdf(&src, 3);
+        extract(&src, &[3, 1], &out).unwrap();
+        assert_eq!(
+            page_widths(&out),
+            vec![103.0, 101.0],
+            "extracted pages must follow the requested order [3, 1]"
+        );
     }
 
     #[test]
