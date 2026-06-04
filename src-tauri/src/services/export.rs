@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::error::{AppError, AppResult};
-use crate::services::layout::markup::LayoutMeta;
+use crate::services::layout::markup::{LayoutMeta, LayoutTheme};
 
 /// The base font size (points) a regular export uses when the caller doesn't
 /// pin one. Matches `LayoutMeta::default`'s 11pt so a 100% scale reproduces the
@@ -51,6 +51,11 @@ pub struct ExportOptions {
     /// document. `null` keeps Typst's default.
     #[serde(default)]
     pub lang: Option<String>,
+    /// Optional per-church branding (fonts / accent / spacing) applied to every
+    /// document in the batch. `null` keeps the house default look (an unthemed
+    /// preamble, byte-identical to no theme at all).
+    #[serde(default)]
+    pub theme: Option<LayoutTheme>,
 }
 
 /// The result of a single document's export within a batch — surfaced so the
@@ -146,6 +151,7 @@ pub fn layout_for(doc_page_size: &str, options: &ExportOptions) -> LayoutMeta {
         paper,
         font_size_pt: BASE_FONT_SIZE_PT * scale,
         lang,
+        theme: options.theme.clone(),
     }
 }
 
@@ -347,6 +353,27 @@ mod tests {
         };
         let meta = layout_for("a4", &opts);
         assert_eq!(meta.lang.as_deref(), Some("nb"));
+    }
+
+    #[test]
+    fn layout_carries_theme() {
+        let theme = LayoutTheme {
+            accent_color: Some("#112233".into()),
+            heading_font: Some("Inter".into()),
+            ..LayoutTheme::default()
+        };
+        let opts = ExportOptions {
+            theme: Some(theme.clone()),
+            ..ExportOptions::default()
+        };
+        let meta = layout_for("a4", &opts);
+        assert_eq!(meta.theme, Some(theme));
+    }
+
+    #[test]
+    fn layout_without_theme_leaves_none() {
+        let meta = layout_for("a4", &ExportOptions::default());
+        assert_eq!(meta.theme, None);
     }
 
     #[test]

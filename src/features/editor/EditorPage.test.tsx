@@ -41,6 +41,7 @@ const { ipcMock, FakeIPCError } = vi.hoisted(() => {
         list: vi.fn(),
         create: vi.fn(),
         update: vi.fn(),
+        reparent: vi.fn(),
         delete: vi.fn(),
       },
       bulletin: { render: vi.fn(), typstCompile: vi.fn() },
@@ -136,6 +137,7 @@ beforeEach(() => {
   ipcMock.block.list.mockResolvedValue([PARENT, CHILD]);
   ipcMock.block.create.mockResolvedValue(mkBlock({ id: "b-new" }));
   ipcMock.block.update.mockResolvedValue(PARENT);
+  ipcMock.block.reparent.mockResolvedValue(CHILD);
   ipcMock.block.delete.mockResolvedValue(undefined);
   ipcMock.bulletin.render.mockResolvedValue("#set page()\nHei");
   ipcMock.bulletin.typstCompile.mockResolvedValue(PDF_B64);
@@ -243,6 +245,56 @@ describe("EditorPage", () => {
     await waitFor(() =>
       expect(ipcMock.block.delete).toHaveBeenCalledWith("b-parent"),
     );
+  });
+
+  it("nests a block into a container via ipc.block.reparent", async () => {
+    // A two_column container plus a loose text block the user nests under it.
+    const CONTAINER = mkBlock({
+      id: "b-col",
+      kind: "two_column",
+      position: 0n,
+    });
+    const LOOSE = mkBlock({ id: "b-loose", kind: "text", position: 1n });
+    ipcMock.block.list.mockResolvedValue([CONTAINER, LOOSE]);
+
+    renderPage();
+    await openDocument();
+    await screen.findByText(/Blokker \(2\)/);
+
+    const looseCard = document.querySelector(
+      '[data-block-id="b-loose"]',
+    ) as HTMLElement;
+    // The move menu offers the container as a destination.
+    const moveSelect = within(looseCard).getByLabelText(
+      "Flytt blokk inn i beholder",
+    );
+    fireEvent.change(moveSelect, { target: { value: "b-col" } });
+
+    await waitFor(() =>
+      expect(ipcMock.block.reparent).toHaveBeenCalledWith("b-loose", "b-col"),
+    );
+  });
+
+  it("does not offer a container as a destination for itself", async () => {
+    const CONTAINER = mkBlock({
+      id: "b-col",
+      kind: "callout",
+      position: 0n,
+    });
+    ipcMock.block.list.mockResolvedValue([CONTAINER]);
+
+    renderPage();
+    await openDocument();
+    await screen.findByText(/Blokker \(1\)/);
+
+    const card = document.querySelector(
+      '[data-block-id="b-col"]',
+    ) as HTMLElement;
+    // A sole top-level container has nowhere to move (no other container, and
+    // it's already top-level) → no move menu at all.
+    expect(
+      within(card).queryByLabelText("Flytt blokk inn i beholder"),
+    ).toBeNull();
   });
 
   it("runs the render→compile chain and surfaces the preview", async () => {

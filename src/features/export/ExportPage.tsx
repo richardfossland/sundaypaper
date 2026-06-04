@@ -30,6 +30,16 @@ import type { Document, ExportOptions } from "@/lib/bindings";
 import { cn } from "@/lib/cn";
 import { projectsKey, documentsKey } from "@/lib/queryKeys";
 import { PdfPreview } from "@/features/builder/PdfPreview";
+import {
+  HEADING_WEIGHTS,
+  SPACING_MAX,
+  SPACING_MIN,
+  accentError,
+  buildTheme,
+  emptyThemeDraft,
+  isHeadingWeight,
+  type ThemeDraft,
+} from "./theme-form";
 
 /** Paper sizes the options panel offers; "" means "keep each document's own". */
 const PAPER_OPTIONS: { value: string; label: string }[] = [
@@ -47,6 +57,18 @@ export function ExportPage() {
   const [largePrintPercent, setLargePrintPercent] = useState(150);
   const [outDir, setOutDir] = useState("");
   const [previewBase64, setPreviewBase64] = useState<string | null>(null);
+  // Per-church branding (Step 3). A draft of raw inputs; `buildTheme` turns it
+  // into the `LayoutTheme | null` we send (null = house default).
+  const [theme, setTheme] = useState<ThemeDraft>(emptyThemeDraft);
+
+  /** Update one field of the theme draft and invalidate the stale preview. */
+  const patchTheme = <K extends keyof ThemeDraft>(
+    key: K,
+    value: ThemeDraft[K],
+  ) => {
+    setTheme((prev) => ({ ...prev, [key]: value }));
+    setPreviewBase64(null);
+  };
 
   // ── Data ────────────────────────────────────────────────────────────────────
   const projects = useQuery({
@@ -78,14 +100,19 @@ export function ExportPage() {
     setPreviewBase64(null);
   };
 
+  // The resolved theme (or null for house default) the options + preview share.
+  const resolvedTheme = useMemo(() => buildTheme(theme), [theme]);
+  const themeAccentError = accentError(theme.accentColor);
+
   // The export options the user assembled — `null` where "leave default".
   const options: ExportOptions = useMemo(
     () => ({
       paper: paper || null,
       largePrintPercent: largePrint ? largePrintPercent : null,
       lang: null,
+      theme: resolvedTheme,
     }),
-    [paper, largePrint, largePrintPercent],
+    [paper, largePrint, largePrintPercent, resolvedTheme],
   );
 
   // First selected doc, in the order they appear in the list — that's what the
@@ -93,9 +120,18 @@ export function ExportPage() {
   const firstSelectedId = docList.find((d) => selected.has(d.id))?.id ?? null;
 
   // ── Preview: render→compile the first selected document ──────────────────────
+  // The preview reflects the chosen branding: we pass a LayoutMeta carrying the
+  // resolved theme (and the paper override / the document's own size) so the
+  // user sees their fonts/accent/spacing before exporting the whole batch.
   const preview = useMutation({
     mutationFn: async (docId: string) => {
-      const source = await ipc.bulletin.render(docId);
+      const doc = docList.find((d) => d.id === docId);
+      const source = await ipc.bulletin.render(docId, {
+        paper: paper || doc?.page_size || "a4",
+        font_size_pt: 11,
+        lang: null,
+        theme: resolvedTheme,
+      });
       return ipc.bulletin.typstCompile(source);
     },
     onSuccess: (base64) => setPreviewBase64(base64),
@@ -296,6 +332,143 @@ export function ExportPage() {
                 <span className="w-12 shrink-0 text-right text-sm font-semibold tabular-nums">
                   {largePrintPercent}%
                 </span>
+              </div>
+            )}
+          </div>
+
+          {/* Per-church branding (Step 3: typography / theme) */}
+          <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] p-3">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                aria-label="Menighetsprofil"
+                checked={theme.enabled}
+                onChange={(e) => patchTheme("enabled", e.target.checked)}
+                className="accent-[var(--color-accent)]"
+              />
+              Menighetsprofil (fonter, farge, linjeavstand)
+            </label>
+
+            {theme.enabled && (
+              <div className="space-y-3 pl-6">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="theme-heading-font"
+                      className="text-xs font-medium text-[var(--color-fg-muted)]"
+                    >
+                      Overskriftsfont
+                    </label>
+                    <input
+                      id="theme-heading-font"
+                      aria-label="Overskriftsfont"
+                      value={theme.headingFont}
+                      placeholder="f.eks. Montserrat"
+                      onChange={(e) =>
+                        patchTheme("headingFont", e.target.value)
+                      }
+                      className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="theme-body-font"
+                      className="text-xs font-medium text-[var(--color-fg-muted)]"
+                    >
+                      Brødtekstfont
+                    </label>
+                    <input
+                      id="theme-body-font"
+                      aria-label="Brødtekstfont"
+                      value={theme.bodyFont}
+                      placeholder="f.eks. EB Garamond"
+                      onChange={(e) => patchTheme("bodyFont", e.target.value)}
+                      className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-2 py-1 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="theme-accent"
+                      className="text-xs font-medium text-[var(--color-fg-muted)]"
+                    >
+                      Aksentfarge
+                    </label>
+                    <input
+                      id="theme-accent"
+                      aria-label="Aksentfarge"
+                      value={theme.accentColor}
+                      placeholder="#C81E2D"
+                      onChange={(e) =>
+                        patchTheme("accentColor", e.target.value)
+                      }
+                      className={cn(
+                        "w-full rounded-md border bg-[var(--color-bg-elevated)] px-2 py-1 text-sm",
+                        themeAccentError
+                          ? "border-[var(--color-danger)]"
+                          : "border-[var(--color-border)]",
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="theme-weight"
+                      className="text-xs font-medium text-[var(--color-fg-muted)]"
+                    >
+                      Overskriftsvekt
+                    </label>
+                    <select
+                      id="theme-weight"
+                      aria-label="Overskriftsvekt"
+                      value={theme.headingWeight}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (isHeadingWeight(v)) patchTheme("headingWeight", v);
+                      }}
+                      className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-2 py-1 text-sm"
+                    >
+                      {HEADING_WEIGHTS.map((w) => (
+                        <option key={w} value={w}>
+                          {w}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {themeAccentError && (
+                  <p
+                    role="alert"
+                    className="flex items-start gap-1.5 text-xs text-[var(--color-danger)]"
+                  >
+                    <AlertCircle size={12} className="mt-0.5 shrink-0" />
+                    {themeAccentError}
+                  </p>
+                )}
+
+                <div className="space-y-1">
+                  <label
+                    htmlFor="theme-spacing"
+                    className="text-xs font-medium text-[var(--color-fg-muted)]"
+                  >
+                    Linjeavstand ×{theme.spacingMultiplier.toFixed(2)}
+                  </label>
+                  <input
+                    id="theme-spacing"
+                    type="range"
+                    aria-label="Linjeavstand"
+                    min={SPACING_MIN}
+                    max={SPACING_MAX}
+                    step={0.05}
+                    value={theme.spacingMultiplier}
+                    onChange={(e) =>
+                      patchTheme("spacingMultiplier", Number(e.target.value))
+                    }
+                    className="w-full accent-[var(--color-accent)]"
+                  />
+                </div>
               </div>
             )}
           </div>

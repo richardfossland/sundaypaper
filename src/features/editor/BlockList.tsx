@@ -14,12 +14,14 @@ import { Plus } from "lucide-react";
 import type { Block } from "@/lib/bindings";
 import { BlockCard } from "./BlockCard";
 import { flattenHierarchy } from "./flatten-hierarchy";
+import { reparentTargets } from "./reparent-options";
 
 interface BlockListProps {
   blocks: Block[];
   busy: boolean;
   onAdd: () => void;
   onUpdate: (id: string, kind: string, data: string) => void;
+  onReparent: (id: string, newParentId: string | null) => void;
   onDelete: (id: string) => void;
 }
 
@@ -28,6 +30,7 @@ export function BlockList({
   busy,
   onAdd,
   onUpdate,
+  onReparent,
   onDelete,
 }: BlockListProps) {
   const flat = flattenHierarchy(blocks);
@@ -61,7 +64,9 @@ export function BlockList({
                 block={block}
                 depth={depth}
                 busy={busy}
+                reparentTargets={reparentTargets(blocks, block.id)}
                 onUpdate={onUpdate}
+                onReparent={onReparent}
                 onDelete={onDelete}
               />
             </li>

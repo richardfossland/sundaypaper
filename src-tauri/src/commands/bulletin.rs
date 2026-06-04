@@ -448,6 +448,7 @@ mod tests {
             paper: "us-letter".into(),
             font_size_pt: 14.0,
             lang: Some("nb".into()),
+            ..LayoutMeta::default()
         };
         let src = render(&db, &doc, Some(meta)).await;
         assert!(src.contains("paper: \"us-letter\""));

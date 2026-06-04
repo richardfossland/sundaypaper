@@ -47,6 +47,7 @@ export type { FormField } from "./FormField";
 
 // Layout engine: block tree → Typst source (services/layout/markup.rs).
 export type { LayoutMeta } from "./LayoutMeta";
+export type { LayoutTheme } from "./LayoutTheme";
 
 // Batch export: many documents → PDFs in one pass (services/export.rs).
 export type { ExportOptions } from "./ExportOptions";

@@ -134,6 +134,11 @@ describe("ipc command contract (name + arg keys)", () => {
       "id",
       "newPosition",
     ]));
+  it("block.reparent (newParentId)", () =>
+    expectCall(() => ipc.block.reparent("x", "p"), "block_reparent", [
+      "id",
+      "newParentId",
+    ]));
 
   // Assets — byteSize -> byte_size
   it("asset.create", () =>

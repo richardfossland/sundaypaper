@@ -134,6 +134,11 @@ export const block = {
    *  affected siblings renormalise to a dense `0..N` range on the backend. */
   reorder: (id: string, newPosition: number) =>
     call<Block>("block_reorder", { id, newPosition }),
+  /** Move a block under a new parent (a container block), or to the top level
+   *  when `newParentId` is `null`. The block lands last in the destination
+   *  group; the backend rejects self-parenting and cycles. */
+  reparent: (id: string, newParentId: string | null) =>
+    call<Block>("block_reparent", { id, newParentId }),
   delete: (id: string) => call<void>("block_delete", { id }),
 };
 
