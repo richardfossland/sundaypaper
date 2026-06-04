@@ -19,7 +19,8 @@ use crate::error::{AppError, AppResult};
 use crate::services::block::{Block, BlockRepo};
 use crate::services::document::DocumentRepo;
 use crate::services::export::{
-    file_name_for, layout_for, validate_request, BatchExportResult, ExportOptions, ExportedFile,
+    dedup_file_name, file_name_for, layout_for, validate_request, BatchExportResult, ExportOptions,
+    ExportedFile,
 };
 use crate::services::layout::engine;
 use crate::services::layout::markup::{build_typst_document, RenderBlock};
@@ -60,6 +61,10 @@ pub async fn bulletin_batch_export(
     let blocks_repo = BlockRepo::new(state.db.clone());
 
     let mut files = Vec::with_capacity(document_ids.len());
+    // Track filenames already written this batch so two documents that share a
+    // title don't overwrite each other's PDF (the title -> filename mapping is
+    // not 1:1 with the id-dedup in validate_request).
+    let mut used_names = std::collections::HashSet::new();
     for document_id in &document_ids {
         // Fetch the document (its page size seeds the layout when options don't
         // pin a paper) and rebuild the render tree exactly as bulletin_render.
@@ -71,7 +76,7 @@ pub async fn bulletin_batch_export(
         let source = build_typst_document(&meta, &blocks);
         let pdf_bytes = engine::compile(&source)?;
 
-        let file_name = file_name_for(&document.title, &options);
+        let file_name = dedup_file_name(&file_name_for(&document.title, &options), &mut used_names);
         let path = dir.join(&file_name);
         std::fs::write(&path, &pdf_bytes)?;
 
@@ -200,6 +205,43 @@ mod tests {
             source.contains("16.5pt"),
             "expected enlarged 16.5pt text size in source, got: {source}"
         );
+    }
+
+    /// Two distinct documents that share a title must not overwrite each other.
+    /// `validate_request` dedups by id (both ids are distinct, so it passes), but
+    /// the filename is derived from the title — so the bare `file_name_for`
+    /// mapping the loop used to use produced ONE path for both docs, clobbering
+    /// the first. The loop now routes every name through `dedup_file_name`; this
+    /// test replicates both the bug (bare names collide) and the fix (deduped
+    /// names land as two distinct files).
+    #[test]
+    fn same_title_documents_do_not_overwrite_each_other() {
+        let opts = ExportOptions::default();
+        let titles = ["Program", "Program"]; // two different docs, same title
+
+        // The bug: the bare title-derived names are identical, so writing both
+        // would target a single path on disk.
+        let bare: Vec<String> = titles.iter().map(|t| file_name_for(t, &opts)).collect();
+        assert_eq!(
+            bare[0], bare[1],
+            "bare file_name_for collides for same-title docs (the bug)"
+        );
+
+        // The fix: routing each name through dedup_file_name (exactly what the
+        // command loop now does) yields two distinct files written to disk.
+        let dir = tempfile::tempdir().unwrap();
+        let mut used = std::collections::HashSet::new();
+        let mut written = Vec::new();
+        for title in titles {
+            let name = dedup_file_name(&file_name_for(title, &opts), &mut used);
+            let path = dir.path().join(&name);
+            std::fs::write(&path, b"%PDF-1.5\n").unwrap();
+            written.push(path);
+        }
+        assert_ne!(written[0], written[1]);
+        assert!(written[0].exists() && written[1].exists());
+        let count = std::fs::read_dir(dir.path()).unwrap().count();
+        assert_eq!(count, 2, "expected two distinct PDFs, found {count}");
     }
 
     /// An options paper size overrides the document's own.

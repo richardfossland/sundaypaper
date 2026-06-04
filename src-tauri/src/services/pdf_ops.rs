@@ -98,8 +98,7 @@ mod tests {
         let mut kids = Vec::new();
         for _ in 0..n {
             let content = Content { operations: vec![] };
-            let content_id =
-                doc.add_object(Stream::new(dictionary! {}, content.encode().unwrap()));
+            let content_id = doc.add_object(Stream::new(dictionary! {}, content.encode().unwrap()));
             let page_id = doc.add_object(dictionary! {
                 "Type" => "Page",
                 "Parent" => pages_id,
@@ -127,10 +126,65 @@ mod tests {
 
     #[cfg(feature = "pdf")]
     fn page_count_of(path: &Path) -> usize {
-        lopdf::Document::load(path)
-            .expect("load")
-            .get_pages()
-            .len()
+        lopdf::Document::load(path).expect("load").get_pages().len()
+    }
+
+    // Build an N-page PDF where page `i` (1-based) carries a distinctive
+    // MediaBox width of `100 + i`, so a test can verify which original page
+    // ended up at each output slot (i.e. extraction ORDER, not just count).
+    #[cfg(feature = "pdf")]
+    fn build_marked_pdf(path: &Path, n: u32) {
+        use lopdf::content::Content;
+        use lopdf::{dictionary, Document, Object, Stream};
+
+        let mut doc = Document::with_version("1.5");
+        let pages_id = doc.new_object_id();
+        let mut kids = Vec::new();
+        for i in 1..=n {
+            let content = Content { operations: vec![] };
+            let content_id = doc.add_object(Stream::new(dictionary! {}, content.encode().unwrap()));
+            let width = (100 + i) as i64;
+            let page_id = doc.add_object(dictionary! {
+                "Type" => "Page",
+                "Parent" => pages_id,
+                "Contents" => content_id,
+                "MediaBox" => vec![0.into(), 0.into(), width.into(), 842.into()],
+            });
+            kids.push(page_id.into());
+        }
+        let count = kids.len() as i64;
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => kids,
+                "Count" => count,
+            }),
+        );
+        let catalog_id = doc.add_object(dictionary! {
+            "Type" => "Catalog",
+            "Pages" => pages_id,
+        });
+        doc.trailer.set("Root", catalog_id);
+        doc.save(path).expect("save test PDF");
+    }
+
+    // MediaBox widths in document (Kids) order — the page-identity markers.
+    #[cfg(feature = "pdf")]
+    fn page_widths(path: &Path) -> Vec<f64> {
+        let doc = lopdf::Document::load(path).expect("load");
+        doc.get_pages()
+            .values()
+            .map(|id| {
+                let dict = doc.get_object(*id).unwrap().as_dict().unwrap();
+                let mb = dict.get(b"MediaBox").unwrap().as_array().unwrap();
+                match &mb[2] {
+                    lopdf::Object::Integer(i) => *i as f64,
+                    lopdf::Object::Real(r) => *r as f64,
+                    _ => panic!("non-numeric MediaBox width"),
+                }
+            })
+            .collect()
     }
 
     // ── pdf_page_count ──────────────────────────────────────────────────────
@@ -252,8 +306,7 @@ mod tests {
         }
         #[cfg(not(feature = "pdf"))]
         {
-            let err =
-                merge_pdfs(&[Path::new("/a.pdf")], Path::new("/out.pdf")).unwrap_err();
+            let err = merge_pdfs(&[Path::new("/a.pdf")], Path::new("/out.pdf")).unwrap_err();
             assert!(matches!(err, AppError::FeatureDisabled { .. }));
         }
     }
@@ -273,6 +326,23 @@ mod tests {
 
     #[cfg(feature = "pdf")]
     #[test]
+    fn extract_preserves_requested_page_order() {
+        // The documented contract: `pages = &[3, 1]` produces a 2-page PDF whose
+        // first page is the original page 3 and second is the original page 1.
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("src.pdf");
+        let out = dir.path().join("out.pdf");
+        build_marked_pdf(&src, 3);
+        extract_pages(&src, &[3, 1], &out).unwrap();
+        assert_eq!(
+            page_widths(&out),
+            vec![103.0, 101.0],
+            "extracted pages must be in the order given, not ascending"
+        );
+    }
+
+    #[cfg(feature = "pdf")]
+    #[test]
     fn extract_single_page() {
         let dir = tempfile::tempdir().unwrap();
         let src = dir.path().join("src.pdf");
@@ -286,8 +356,7 @@ mod tests {
     fn extract_empty_selection_returns_validation_error() {
         use crate::error::AppError;
         // No file access needed: the empty-slice guard fires first.
-        let err =
-            extract_pages(Path::new("/any.pdf"), &[], Path::new("/out.pdf")).unwrap_err();
+        let err = extract_pages(Path::new("/any.pdf"), &[], Path::new("/out.pdf")).unwrap_err();
         assert!(matches!(err, AppError::Validation(_)));
     }
 
