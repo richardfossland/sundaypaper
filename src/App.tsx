@@ -6,6 +6,7 @@ import { UpdateBanner } from "@/components/UpdateBanner";
 import { DashboardPage } from "@/features/dashboard/DashboardPage";
 import { DesignPage } from "@/features/design/DesignPage";
 import { AssetsPanel } from "@/features/assets/AssetsPanel";
+import { SongsPanel } from "@/features/songs/SongsPanel";
 import { SangbokPanel } from "@/features/sangbok/SangbokPanel";
 import { BuilderPage } from "@/features/builder/BuilderPage";
 import { TemplatesPanel } from "@/features/templates/TemplatesPanel";
@@ -32,6 +33,8 @@ function App() {
           <DesignPage />
         ) : route === "library" ? (
           <AssetsPanel />
+        ) : route === "songs" ? (
+          <SongsPanel />
         ) : route === "builder" ? (
           <BuilderPage />
         ) : route === "templates" ? (
@@ -44,60 +47,13 @@ function App() {
           <ExportPage />
         ) : route === "splitter" ? (
           <SangbokPanel />
-        ) : route === "settings" ? (
-          <SettingsPage />
         ) : (
-          <Placeholder route={route} />
+          <SettingsPage />
         )}
       </main>
 
       <CommandPalette onNavigate={setRoute} />
       <UpdateBanner />
-    </div>
-  );
-}
-
-function Placeholder({
-  route,
-}: {
-  route: Exclude<Route, "dashboard" | "design">;
-}) {
-  const titles: Record<
-    Exclude<Route, "dashboard" | "design">,
-    { title: string; phase: string }
-  > = {
-    library: { title: "Ressursbibliotek", phase: "Phase 2.3" },
-    builder: { title: "Dokumentbygger", phase: "Phase 4.3" },
-    templates: { title: "Malbygger", phase: "Phase 4.2" },
-    splitter: { title: "Sangbok-klipper", phase: "Phase 3" },
-    editor: { title: "PDF-editor", phase: "Phase 7.1" },
-    forms: { title: "Skjema", phase: "Phase 7.2" },
-    export: { title: "Eksport", phase: "Phase 6" },
-    settings: { title: "Innstillinger", phase: "Phase 9" },
-  };
-  const info = titles[route];
-
-  return (
-    <div className="grid h-full place-items-center">
-      <div className="max-w-sm text-center">
-        <div className="mb-2 text-xs font-medium uppercase tracking-widest text-[var(--color-accent)]">
-          {info.phase}
-        </div>
-        <h1 className="mb-2 text-[var(--text-ui-2xl)] font-bold">
-          {info.title}
-        </h1>
-        <p className="text-sm text-[var(--color-fg-muted)]">
-          Denne siden er planlagt for {info.phase}. Scaffolding er på plass —
-          implementasjon kommer i senere fase.
-        </p>
-        <p className="mt-6 text-xs text-[var(--color-fg-muted)]">
-          Trykk{" "}
-          <kbd className="rounded border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-1.5 py-0.5 font-mono">
-            ⌘K
-          </kbd>{" "}
-          for kommandopaletten.
-        </p>
-      </div>
     </div>
   );
 }
