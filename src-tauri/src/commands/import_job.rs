@@ -39,3 +39,15 @@ pub async fn import_job_update_status(
         .update_status(&id, &status, detail.as_deref())
         .await
 }
+
+/// Permanently delete a single import job from the log.
+#[tauri::command]
+pub async fn import_job_delete(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    ImportJobRepo::new(state.db.clone()).delete(&id).await
+}
+
+/// Delete every finished (done/errored) import job. Returns how many were removed.
+#[tauri::command]
+pub async fn import_job_clear_finished(state: State<'_, AppState>) -> AppResult<u64> {
+    ImportJobRepo::new(state.db.clone()).clear_finished().await
+}

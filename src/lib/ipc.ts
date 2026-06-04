@@ -203,6 +203,10 @@ export const importJob = {
   list: () => call<ImportJob[]>("import_job_list"),
   updateStatus: (id: string, status: string, detail?: string) =>
     call<ImportJob>("import_job_update_status", { id, status, detail }),
+  /** Permanently delete a single job from the log. */
+  delete: (id: string) => call<void>("import_job_delete", { id }),
+  /** Delete every finished (done/errored) job. Resolves to the count removed. */
+  clearFinished: () => call<number>("import_job_clear_finished"),
 };
 
 // ── Settings ─────────────────────────────────────────────────────────────────

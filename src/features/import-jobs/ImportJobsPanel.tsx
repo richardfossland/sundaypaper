@@ -1,17 +1,17 @@
 /**
- * Import-job history panel — a read-only log of past ingest jobs (OCR, split,
- * merge) on top of `ipc.importJob.list()`. Shows each job's source file, kind,
- * a colour-coded status badge, timestamp, and any error detail.
+ * Import-job history panel — a log of past ingest jobs (OCR, split, merge) on
+ * top of `ipc.importJob.list()`. Shows each job's source file, kind, a
+ * colour-coded status badge, timestamp, and any error detail.
  *
- * The backend has no delete/clear command for import jobs, so "Skjul ferdige"
- * is a client-side view filter (hide done/errored rows) rather than a
- * destructive DB clear — honest about what the shipped IPC allows.
+ * The log is now destructively editable: each row has a Delete (with confirm)
+ * backed by `ipc.importJob.delete`, and a "Tøm ferdige" header action backed by
+ * `ipc.importJob.clearFinished` removes every done/errored job in one DB op.
  *
  * Slots into the "imports" route in App.tsx.
  */
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   CheckCircle2,
@@ -19,6 +19,7 @@ import {
   History,
   Loader2,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 
 import { ipc, errMessage } from "@/lib/ipc";
@@ -27,6 +28,7 @@ import { cn } from "@/lib/cn";
 import {
   baseName,
   formatTimestamp,
+  isFinished,
   kindLabel,
   normStatus,
   statusCounts,
@@ -75,18 +77,40 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function ImportJobsPanel() {
-  const [hideFinished, setHideFinished] = useState(false);
+  const qc = useQueryClient();
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   const query = useQuery({
     queryKey: importJobsKey,
     queryFn: () => ipc.importJob.list(),
   });
 
+  const invalidate = () => qc.invalidateQueries({ queryKey: importJobsKey });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => ipc.importJob.delete(id),
+    onSuccess: () => {
+      invalidate();
+      setConfirmDelete(null);
+    },
+  });
+
+  const clearFinished = useMutation({
+    mutationFn: () => ipc.importJob.clearFinished(),
+    onSuccess: () => {
+      invalidate();
+      setConfirmClear(false);
+    },
+  });
+
   const jobs = useMemo(() => query.data ?? [], [query.data]);
   const counts = useMemo(() => statusCounts(jobs), [jobs]);
-  const rows = useMemo(
-    () => viewJobs(jobs, { hideFinished }),
-    [jobs, hideFinished],
+  // No client-side filtering any more — the list mirrors the DB exactly.
+  const rows = useMemo(() => viewJobs(jobs, { hideFinished: false }), [jobs]);
+  const hasFinished = useMemo(
+    () => jobs.some((j) => isFinished(j.status)),
+    [jobs],
   );
 
   return (
@@ -99,14 +123,38 @@ export function ImportJobsPanel() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs text-[var(--color-fg-muted)]">
-            <input
-              type="checkbox"
-              checked={hideFinished}
-              onChange={(e) => setHideFinished(e.target.checked)}
-            />
-            Skjul ferdige
-          </label>
+          {hasFinished &&
+            (confirmClear ? (
+              <span className="flex items-center gap-2 text-xs">
+                <span className="text-[var(--color-fg-muted)]">
+                  Slette alle ferdige?
+                </span>
+                <button
+                  type="button"
+                  onClick={() => clearFinished.mutate()}
+                  disabled={clearFinished.isPending}
+                  className="rounded-md bg-[var(--color-danger)] px-2.5 py-1.5 font-bold text-white hover:brightness-110 disabled:opacity-50"
+                >
+                  Tøm
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmClear(false)}
+                  className="rounded-md px-2 py-1.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+                >
+                  Avbryt
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmClear(true)}
+                className="flex items-center gap-1.5 rounded-md border border-[var(--color-border)] px-2.5 py-1.5 text-xs text-[var(--color-fg-muted)] hover:border-[var(--color-danger)] hover:text-[var(--color-danger)]"
+              >
+                <Trash2 size={13} />
+                Tøm ferdige
+              </button>
+            ))}
           <button
             type="button"
             onClick={() => query.refetch()}
@@ -122,6 +170,15 @@ export function ImportJobsPanel() {
           </button>
         </div>
       </header>
+
+      {clearFinished.isError && (
+        <p
+          role="alert"
+          className="border-b border-[var(--color-border)] px-6 py-2 text-xs text-[var(--color-danger)]"
+        >
+          {errMessage(clearFinished.error, "Kunne ikke tømme ferdige jobber")}
+        </p>
+      )}
 
       {/* Summary counters */}
       {jobs.length > 0 && (
@@ -157,9 +214,7 @@ export function ImportJobsPanel() {
                 aria-hidden
               />
               <p className="text-sm">
-                {jobs.length === 0
-                  ? "Ingen importjobber ennå. De vises her når du leser inn en PDF."
-                  : "Ingen jobber å vise. Fjern «Skjul ferdige» for å se alle."}
+                Ingen importjobber ennå. De vises her når du leser inn en PDF.
               </p>
             </div>
           </div>
@@ -189,6 +244,34 @@ export function ImportJobsPanel() {
                     <span className="text-[11px] text-[var(--color-fg-muted)]">
                       {formatTimestamp(job.created_at)}
                     </span>
+                    {confirmDelete === job.id ? (
+                      <span className="flex items-center gap-1.5 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => remove.mutate(job.id)}
+                          disabled={remove.isPending}
+                          className="rounded bg-[var(--color-danger)] px-2 py-0.5 font-bold text-white hover:brightness-110 disabled:opacity-50"
+                        >
+                          Slett
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(null)}
+                          className="rounded px-1.5 py-0.5 text-[var(--color-fg-muted)] hover:text-[var(--color-fg)]"
+                        >
+                          Avbryt
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(job.id)}
+                        aria-label={`Slett ${baseName(job.source_path)}`}
+                        className="rounded p-1 text-[var(--color-fg-muted)] hover:text-[var(--color-danger)]"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -203,6 +286,14 @@ export function ImportJobsPanel() {
                 {job.detail && normStatus(job.status) !== "error" && (
                   <p className="mt-2 text-xs text-[var(--color-fg-muted)]">
                     {job.detail}
+                  </p>
+                )}
+                {remove.isError && confirmDelete === job.id && (
+                  <p
+                    role="alert"
+                    className="mt-2 text-xs text-[var(--color-danger)]"
+                  >
+                    {errMessage(remove.error, "Kunne ikke slette jobben")}
                   </p>
                 )}
               </li>
