@@ -51,6 +51,11 @@ const { ipcMock, FakeIPCError } = vi.hoisted(() => {
 vi.mock("@/lib/ipc", () => ({
   ipc: ipcMock,
   IPCError: FakeIPCError,
+  errMessage: (err: unknown, fallback: string) => {
+    if (err instanceof FakeIPCError) return `${err.code} — ${err.message}`;
+    if (err instanceof Error) return err.message;
+    return fallback;
+  },
 }));
 
 import { EditorPage } from "./EditorPage";

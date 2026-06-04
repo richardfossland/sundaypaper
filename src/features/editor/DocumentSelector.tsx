@@ -12,20 +12,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { FileText, FolderOpen, Loader2 } from "lucide-react";
 
-import { ipc, IPCError } from "@/lib/ipc";
+import { ipc, errMessage } from "@/lib/ipc";
 import { cn } from "@/lib/cn";
-
-export const PROJECTS_KEY = ["projects"] as const;
-/** Query key for a project's documents — exported so the editor can invalidate. */
-export const documentsKey = (projectId: string) =>
-  ["documents", projectId] as const;
-
-/** Pull a readable message out of a query/mutation error. */
-function errMessage(err: unknown, fallback: string): string {
-  if (err instanceof IPCError) return `${err.code} — ${err.message}`;
-  if (err instanceof Error) return err.message;
-  return fallback;
-}
+import { projectsKey, documentsKey } from "@/lib/queryKeys";
 
 interface DocumentSelectorProps {
   projectId: string;
@@ -41,7 +30,7 @@ export function DocumentSelector({
   onSelectDocument,
 }: DocumentSelectorProps) {
   const projects = useQuery({
-    queryKey: PROJECTS_KEY,
+    queryKey: projectsKey,
     queryFn: () => ipc.project.list(),
   });
 

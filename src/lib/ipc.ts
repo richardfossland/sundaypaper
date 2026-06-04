@@ -48,6 +48,14 @@ export class IPCError extends Error {
   }
 }
 
+/** Pull a readable message out of a query/mutation error. An `IPCError` carries
+ *  the Rust `code`, a plain `Error` just its message; anything else falls back. */
+export function errMessage(err: unknown, fallback: string): string {
+  if (err instanceof IPCError) return `${err.code} — ${err.message}`;
+  if (err instanceof Error) return err.message;
+  return fallback;
+}
+
 /** Map a raw value thrown by `invoke()` into a typed error. Pure + testable:
  *  Tauri rethrows a serialised `AppError` as a plain `{ code, message }`. */
 export function toIPCError(raw: unknown): Error {

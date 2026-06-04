@@ -17,31 +17,7 @@ import { AlertCircle, Save, Trash2 } from "lucide-react";
 
 import type { Block } from "@/lib/bindings";
 import { cn } from "@/lib/cn";
-
-/** Block kinds the layout engine renders today (see services/bulletin.rs). */
-export const BLOCK_KINDS = [
-  "heading",
-  "text",
-  "song",
-  "scripture",
-  "liturgy",
-  "announcement",
-  // Fillable form-field kinds (Phase 7.2 — FormBuilder).
-  "form_field",
-  "checkbox",
-  "signature",
-] as const;
-
-/** Validate a string is parseable JSON; returns an error message or null. */
-export function jsonError(raw: string): string | null {
-  if (raw.trim() === "") return null; // empty is allowed (defaults to "{}")
-  try {
-    JSON.parse(raw);
-    return null;
-  } catch (e) {
-    return e instanceof Error ? e.message : "Ugyldig JSON";
-  }
-}
+import { BLOCK_KINDS, jsonError } from "./block-kinds";
 
 interface BlockCardProps {
   block: Block;

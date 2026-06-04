@@ -15,6 +15,7 @@
 import { Plus, Trash2, FileStack } from "lucide-react";
 
 import type { ServicePlan, SetlistItem, SetlistItemKind } from "@/lib/bindings";
+import { emptyItem, samplePlan } from "./plan-defaults";
 
 // The kinds we surface in the picker. The binding allows more (`#[serde(other)]`
 // keeps it open) but these cover a normal Sunday order-of-service.
@@ -32,53 +33,6 @@ const ITEM_KINDS: ReadonlyArray<{ value: SetlistItemKind; label: string }> = [
   { value: "offering", label: "Offer" },
   { value: "benediction", label: "Velsignelse" },
 ];
-
-/** A fresh, empty item — the default a new row starts from. */
-export function emptyItem(kind: SetlistItemKind = "welcome"): SetlistItem {
-  return {
-    kind,
-    title: null,
-    body: null,
-    leader: null,
-    time: null,
-    copyright: null,
-    page_break: false,
-    song: null,
-    scripture: null,
-    asset: null,
-  };
-}
-
-/** An empty plan with a single welcome row to start from. */
-export function emptyPlan(): ServicePlan {
-  return { title: null, church: null, date: null, items: [emptyItem()] };
-}
-
-/** A representative plan so the user (and the e2e smoke) can try the pipeline
- *  without typing. Mirrors a typical Norwegian høymesse skeleton. */
-export function samplePlan(): ServicePlan {
-  return {
-    title: "Høymesse",
-    church: "Vår Frelsers menighet",
-    date: "1. juni 2026",
-    items: [
-      { ...emptyItem("welcome"), title: "Velkommen", leader: "Liturg" },
-      {
-        ...emptyItem("song"),
-        title: "Måne og sol",
-        copyright: "© Det Norske Misjonsselskap",
-      },
-      {
-        ...emptyItem("scripture"),
-        title: "Første lesning",
-        body: "Johannes 3:16–21",
-      },
-      { ...emptyItem("sermon"), title: "Preken", leader: "Sokneprest" },
-      { ...emptyItem("prayer"), title: "Forbønn" },
-      { ...emptyItem("benediction"), title: "Velsignelse" },
-    ],
-  };
-}
 
 interface ServicePlanFormProps {
   plan: ServicePlan;

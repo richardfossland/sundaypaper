@@ -10,19 +10,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2, Trash2 } from "lucide-react";
 
 import { ipc, IPCError } from "@/lib/ipc";
-
-const KEY = ["projects"];
+import { projectsKey } from "@/lib/queryKeys";
 
 export function ProjectsPanel() {
   const qc = useQueryClient();
   const [name, setName] = useState("");
 
   const projects = useQuery({
-    queryKey: KEY,
+    queryKey: projectsKey,
     queryFn: () => ipc.project.list(),
   });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: KEY });
+  const invalidate = () => qc.invalidateQueries({ queryKey: projectsKey });
 
   const create = useMutation({
     mutationFn: (n: string) => ipc.project.create(n),
