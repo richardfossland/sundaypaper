@@ -33,6 +33,7 @@ import type {
   Song,
   Template,
   TemplateVar,
+  TemplateVarInput,
 } from "./bindings";
 
 const DEV = import.meta.env.DEV;
@@ -272,14 +273,6 @@ export const pdfOps = {
 };
 
 // ── Document templates (Phase doc-templates) ─────────────────────────────────
-
-export interface TemplateVarInput {
-  name: string;
-  label: string;
-  kind: string;
-  defaultValue?: string;
-  required: boolean;
-}
 
 export const docTemplate = {
   create: (

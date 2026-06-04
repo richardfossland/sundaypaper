@@ -14,6 +14,7 @@ import {
   Music,
   LayoutTemplate,
   PenSquare,
+  FileStack,
   Scissors,
   FileText,
   ClipboardList,
@@ -105,6 +106,11 @@ export function CommandPalette({ onNavigate }: CommandPaletteProps) {
               onSelect={() => go("templates")}
               icon={<PenSquare size={14} />}
               label="Maler"
+            />
+            <Item
+              onSelect={() => go("doctemplates")}
+              icon={<FileStack size={14} />}
+              label="Dokumentmaler"
             />
             <Item
               onSelect={() => go("splitter")}

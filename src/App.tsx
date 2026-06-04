@@ -10,6 +10,7 @@ import { SongsPanel } from "@/features/songs/SongsPanel";
 import { SangbokPanel } from "@/features/sangbok/SangbokPanel";
 import { BuilderPage } from "@/features/builder/BuilderPage";
 import { TemplatesPanel } from "@/features/templates/TemplatesPanel";
+import { DocTemplatesPanel } from "@/features/doc-templates/DocTemplatesPanel";
 import { EditorPage } from "@/features/editor/EditorPage";
 import { FormsPage } from "@/features/forms/FormsPage";
 import { ExportPage } from "@/features/export/ExportPage";
@@ -39,6 +40,8 @@ function App() {
           <BuilderPage />
         ) : route === "templates" ? (
           <TemplatesPanel />
+        ) : route === "doctemplates" ? (
+          <DocTemplatesPanel />
         ) : route === "editor" ? (
           <EditorPage />
         ) : route === "forms" ? (

@@ -4,6 +4,7 @@ import {
   Music,
   LayoutTemplate,
   PenSquare,
+  FileStack,
   Scissors,
   FileText,
   ClipboardList,
@@ -21,6 +22,7 @@ type Route =
   | "songs"
   | "builder"
   | "templates"
+  | "doctemplates"
   | "splitter"
   | "editor"
   | "forms"
@@ -40,6 +42,7 @@ const NAV_ITEMS: Array<{ id: Route; label: string; icon: typeof Library }> = [
   { id: "songs", label: "Sanger", icon: Music },
   { id: "builder", label: "Bygger", icon: LayoutTemplate },
   { id: "templates", label: "Maler", icon: PenSquare },
+  { id: "doctemplates", label: "Dokumentmaler", icon: FileStack },
   { id: "splitter", label: "Klipper", icon: Scissors },
   { id: "editor", label: "Editor", icon: FileText },
   { id: "forms", label: "Skjema", icon: ClipboardList },

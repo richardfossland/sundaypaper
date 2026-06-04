@@ -17,3 +17,6 @@ export const documentsKey = (projectId: string) =>
 
 /** Query key for the song catalog list. */
 export const songsKey = ["songs"] as const;
+
+/** Query key for the document-template list. */
+export const docTemplatesKey = ["docTemplates"] as const;

@@ -25,6 +25,7 @@ export type { PdfPageInfo } from "./PdfPageInfo";
 export type { DocTemplate } from "./DocTemplate";
 export type { DocTemplateKind } from "./DocTemplateKind";
 export type { TemplateVar } from "./TemplateVar";
+export type { TemplateVarInput } from "./TemplateVarInput";
 export type { TemplateVarKind } from "./TemplateVarKind";
 
 // Sangbok-klipper pipeline (Phase 3.1 OCR prep).
