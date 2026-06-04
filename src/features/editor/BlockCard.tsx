@@ -13,11 +13,17 @@
  */
 
 import { useEffect, useState } from "react";
-import { AlertCircle, Save, Trash2 } from "lucide-react";
+import { AlertCircle, IndentIncrease, Save, Trash2 } from "lucide-react";
 
 import type { Block } from "@/lib/bindings";
 import { cn } from "@/lib/cn";
-import { BLOCK_KINDS, jsonError } from "./block-kinds";
+import {
+  BLOCK_KINDS,
+  blockKindLabel,
+  isContainerKind,
+  jsonError,
+} from "./block-kinds";
+import type { ReparentTarget } from "./reparent-options";
 import { TableEditor } from "./TableEditor";
 
 interface BlockCardProps {
@@ -25,7 +31,11 @@ interface BlockCardProps {
   /** Depth in the parent_id hierarchy; indents the card. 0 = top level. */
   depth: number;
   busy: boolean;
+  /** Container blocks this card may be moved into (already excludes its own
+   *  subtree + current parent). Empty → only the "move out" option shows. */
+  reparentTargets: ReparentTarget[];
   onUpdate: (id: string, kind: string, data: string) => void;
+  onReparent: (id: string, newParentId: string | null) => void;
   onDelete: (id: string) => void;
 }
 
@@ -33,7 +43,9 @@ export function BlockCard({
   block,
   depth,
   busy,
+  reparentTargets,
   onUpdate,
+  onReparent,
   onDelete,
 }: BlockCardProps) {
   const [kind, setKind] = useState(block.kind);
@@ -70,12 +82,48 @@ export function BlockCard({
           )}
           {BLOCK_KINDS.map((k) => (
             <option key={k} value={k}>
-              {k}
+              {blockKindLabel(k)}
             </option>
           ))}
         </select>
 
+        {isContainerKind(block.kind) && (
+          <span className="rounded-md bg-[color-mix(in_oklch,var(--color-accent)_12%,transparent)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-accent)]">
+            Beholder
+          </span>
+        )}
+
         <span className="flex-1" />
+
+        {/* Move-into-container menu: nest this block under a container, or move
+            it back out to the top level. Only shown when there's somewhere to
+            go (a container exists, or this block is itself nested). */}
+        {(reparentTargets.length > 0 || block.parent_id !== null) && (
+          <label className="flex items-center gap-1 text-[var(--color-fg-muted)]">
+            <IndentIncrease size={13} aria-hidden />
+            <select
+              aria-label="Flytt blokk inn i beholder"
+              value=""
+              disabled={busy}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === "") return;
+                onReparent(block.id, v === "__root__" ? null : v);
+              }}
+              className="rounded-md border border-[var(--color-border)] bg-[var(--color-bg-elevated)] px-1.5 py-1 text-xs"
+            >
+              <option value="">Flytt inn i…</option>
+              {block.parent_id !== null && (
+                <option value="__root__">Toppnivå (flytt ut)</option>
+              )}
+              {reparentTargets.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {blockKindLabel(t.kind)} ({t.id.slice(0, 6)})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <button
           type="button"

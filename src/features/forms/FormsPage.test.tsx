@@ -40,6 +40,7 @@ const { ipcMock, FakeIPCError } = vi.hoisted(() => {
         list: vi.fn(),
         create: vi.fn(),
         update: vi.fn(),
+        reparent: vi.fn(),
         delete: vi.fn(),
       },
       bulletin: { render: vi.fn(), typstCompile: vi.fn() },

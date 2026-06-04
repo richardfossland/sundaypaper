@@ -59,6 +59,15 @@ export function EditorPage() {
     onSuccess: invalidateBlocks,
   });
 
+  const reparentBlock = useMutation({
+    // Nest a block under a container (or move it back to the top level). The
+    // backend rejects self-parenting + cycles; we still pre-filter the offered
+    // targets in the UI.
+    mutationFn: (v: { id: string; newParentId: string | null }) =>
+      ipc.block.reparent(v.id, v.newParentId),
+    onSuccess: invalidateBlocks,
+  });
+
   const deleteBlock = useMutation({
     // `block_delete` cascades to the subtree on the backend.
     mutationFn: (id: string) => ipc.block.delete(id),
@@ -75,7 +84,10 @@ export function EditorPage() {
   });
 
   const busy =
-    addBlock.isPending || updateBlock.isPending || deleteBlock.isPending;
+    addBlock.isPending ||
+    updateBlock.isPending ||
+    reparentBlock.isPending ||
+    deleteBlock.isPending;
 
   const onSelectProject = (id: string) => {
     setProjectId(id);
@@ -89,7 +101,11 @@ export function EditorPage() {
 
   const blockList: Block[] = blocks.data ?? [];
   const mutationError =
-    addBlock.error ?? updateBlock.error ?? deleteBlock.error ?? null;
+    addBlock.error ??
+    updateBlock.error ??
+    reparentBlock.error ??
+    deleteBlock.error ??
+    null;
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -149,6 +165,9 @@ export function EditorPage() {
               onAdd={() => addBlock.mutate()}
               onUpdate={(id, kind, data) =>
                 updateBlock.mutate({ id, kind, data })
+              }
+              onReparent={(id, newParentId) =>
+                reparentBlock.mutate({ id, newParentId })
               }
               onDelete={(id) => deleteBlock.mutate(id)}
             />

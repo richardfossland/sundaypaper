@@ -109,6 +109,12 @@ export function FormsPage() {
     onSuccess: invalidateBlocks,
   });
 
+  const reparentBlock = useMutation({
+    mutationFn: (v: { id: string; newParentId: string | null }) =>
+      ipc.block.reparent(v.id, v.newParentId),
+    onSuccess: invalidateBlocks,
+  });
+
   const deleteBlock = useMutation({
     mutationFn: (id: string) => ipc.block.delete(id),
     onSuccess: invalidateBlocks,
@@ -124,7 +130,10 @@ export function FormsPage() {
   });
 
   const busy =
-    addField.isPending || updateBlock.isPending || deleteBlock.isPending;
+    addField.isPending ||
+    updateBlock.isPending ||
+    reparentBlock.isPending ||
+    deleteBlock.isPending;
 
   const onSelectProject = (id: string) => {
     setProjectId(id);
@@ -141,6 +150,7 @@ export function FormsPage() {
     createForm.error ??
     addField.error ??
     updateBlock.error ??
+    reparentBlock.error ??
     deleteBlock.error ??
     null;
 
@@ -261,6 +271,9 @@ export function FormsPage() {
               }
               onUpdate={(id, kind, data) =>
                 updateBlock.mutate({ id, kind, data })
+              }
+              onReparent={(id, newParentId) =>
+                reparentBlock.mutate({ id, newParentId })
               }
               onDelete={(id) => deleteBlock.mutate(id)}
             />
