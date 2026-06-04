@@ -166,6 +166,28 @@ fn preamble(meta: &LayoutMeta) -> String {
                  ..if header and items.len() >= cols {{ items.slice(0, cols).map(c => table.cell(fill: luma(230))[#text(weight: \"bold\")[#c]]) }} else {{ () }},\n    \
                  ..if header {{ items.slice(calc.min(cols, items.len())) }} else {{ items }},\n  \
              )\n\
+         ]\n\
+         // Container helpers (Step 2: block nesting).\n\
+         // Two-column: a 1fr/1fr grid that lays its children out in row-major\n\
+         // order (child 0 left, child 1 right, child 2 left of the next row, …).\n\
+         // The classic poetry-on-left / translation-on-right pairing falls out\n\
+         // of feeding paired children. An empty container renders nothing.\n\
+         #let bp-twocol(..cells) = {{\n  \
+             let items = cells.pos()\n  \
+             if items.len() > 0 {{ block(below: 0.7em)[#grid(columns: (1fr, 1fr), column-gutter: 1.2em, row-gutter: 0.5em, ..items)] }}\n\
+         }}\n\
+         // Callout: a highlighted, boxed region (prayers, notes, asides) wrapping\n\
+         // its children. An optional escaped title prints bold at the top.\n\
+         #let bp-callout(title, ..body) = block(\n    \
+             below: 0.7em,\n    \
+             width: 100%,\n    \
+             inset: 0.8em,\n    \
+             radius: 4pt,\n    \
+             fill: luma(245),\n    \
+             stroke: (left: 2pt + luma(160)),\n  \
+         )[\n  \
+             #if title != none {{ [#text(weight: \"bold\")[#title]#v(0.3em)] }}\n  \
+             #body.pos().join()\n\
          ]\n\n",
     )
 }
@@ -173,6 +195,14 @@ fn preamble(meta: &LayoutMeta) -> String {
 /// Render one block (and recurse into its children). Dispatches on `kind`;
 /// unknown kinds degrade to the generic text renderer so nothing is dropped —
 /// the same "never lose a block" promise the bulletin generator makes.
+///
+/// Two block kinds are **containers** (`two_column` / `callout`): they consume
+/// their children, arranging each child's rendered markup inside a layout
+/// construct (a two-column grid, a boxed callout) rather than letting the
+/// children fall out as flat siblings. Every other kind is a leaf as far as
+/// layout is concerned: it renders itself and then its children follow flat
+/// after it, exactly as before (this preserves the old behaviour for trees that
+/// happen to carry children on non-container nodes).
 fn render_block(block: &RenderBlock) -> String {
     let d = &block.data;
     let mut s = String::new();
@@ -183,6 +213,18 @@ fn render_block(block: &RenderBlock) -> String {
     }
 
     match block.kind.as_str() {
+        // --- containers: they OWN their children's layout ---
+        "two_column" => {
+            s.push_str(&render_two_column(block));
+            s.push('\n');
+            return s;
+        }
+        "callout" => {
+            s.push_str(&render_callout(block));
+            s.push('\n');
+            return s;
+        }
+        // --- leaves: render self, then children flat after ---
         "heading" => s.push_str(&render_heading(d)),
         "song" => s.push_str(&render_song(d)),
         "music" => s.push_str(&render_music(d)),
@@ -202,6 +244,52 @@ fn render_block(block: &RenderBlock) -> String {
         s.push_str(&render_block(child));
     }
     s.push('\n');
+    s
+}
+
+/// Render each child of a container to its own balanced markup chunk, wrapped in
+/// a content block `[…]` so it can be passed as a single positional argument to
+/// a layout helper. Each child goes through the normal [`render_block`] dispatch
+/// (so a child may itself be a container — nesting works to any depth). The
+/// trailing newline `render_block` appends is trimmed inside each cell so the
+/// grid/callout markup stays compact, but the child's own bracket balance is
+/// untouched.
+fn child_cells(block: &RenderBlock) -> Vec<String> {
+    block
+        .children
+        .iter()
+        .map(|child| format!("[{}]", render_block(child).trim_end_matches('\n')))
+        .collect()
+}
+
+/// `two_column` container — lays its children out in a two-column (1fr/1fr)
+/// grid, row-major (child 0 left, child 1 right, child 2 left of the next row…).
+/// The canonical use is poetry-on-left / translation-on-right by feeding paired
+/// children. With no children it emits nothing (the helper guards on an empty
+/// cell list), so an empty container never leaves a stray grid behind.
+fn render_two_column(block: &RenderBlock) -> String {
+    let cells = child_cells(block);
+    let mut s = String::from("#bp-twocol(");
+    s.push_str(&cells.join(", "));
+    s.push_str(")\n");
+    s
+}
+
+/// `callout` container — wraps its children in a highlighted, boxed region for
+/// prayers, notes and asides. An optional `title` (escaped, falling back to a
+/// `role` keyword) prints bold at the top of the box; the children render inside
+/// it via the normal dispatch. The title/role is escaped through
+/// [`content_arg`], so it can never inject markup.
+fn render_callout(block: &RenderBlock) -> String {
+    let d = &block.data;
+    let title = field(d, "title").or_else(|| field(d, "role"));
+    let cells = child_cells(block);
+    let mut s = format!("#bp-callout({}", content_arg(&title));
+    for cell in &cells {
+        s.push_str(", ");
+        s.push_str(cell);
+    }
+    s.push_str(")\n");
     s
 }
 
@@ -1333,6 +1421,183 @@ mod tests {
         assert!(src.contains("#bp-table(64, "));
     }
 
+    // --- containers (Step 2: block nesting) -----------------------------------
+
+    #[test]
+    fn preamble_defines_container_helpers() {
+        let src = build_typst_document(&LayoutMeta::default(), &[]);
+        assert!(src.contains("#let bp-twocol"));
+        assert!(src.contains("#let bp-callout"));
+    }
+
+    fn container(kind: &str, data: serde_json::Value, children: Vec<RenderBlock>) -> RenderBlock {
+        RenderBlock {
+            kind: kind.into(),
+            data,
+            children,
+        }
+    }
+
+    #[test]
+    fn two_column_renders_children_as_grid_cells_in_order() {
+        // Poetry-on-left / translation-on-right: two children become two cells.
+        let b = container(
+            "two_column",
+            json!({}),
+            vec![
+                RenderBlock::leaf("text", json!({ "text": "Original" })),
+                RenderBlock::leaf("text", json!({ "text": "Oversettelse" })),
+            ],
+        );
+        let src = doc(&[b]);
+        let call = src
+            .lines()
+            .find(|l| l.starts_with("#bp-twocol("))
+            .expect("twocol call emitted");
+        // Two bracketed cells, the left before the right, each carrying its
+        // child's rendered paragraph.
+        assert!(call.contains("#par[Original]"), "left cell holds child 0");
+        assert!(
+            call.contains("#par[Oversettelse]"),
+            "right cell holds child 1"
+        );
+        let left = call.find("Original").unwrap();
+        let right = call.find("Oversettelse").unwrap();
+        assert!(left < right, "cells are emitted in child order");
+        // Exactly two top-level cells (two `, [` separators → one comma between
+        // the two cells; assert the call is a single balanced #bp-twocol(...)).
+        assert!(call.ends_with(')'));
+    }
+
+    #[test]
+    fn two_column_children_are_not_flat_siblings() {
+        // The whole point of a container: its children live INSIDE the helper
+        // call, not as flat blocks after it.
+        let b = container(
+            "two_column",
+            json!({}),
+            vec![RenderBlock::leaf("text", json!({ "text": "inside" }))],
+        );
+        let src = doc(&[b]);
+        // The child markup appears only within the bp-twocol(...) line, never on
+        // its own line as a flat sibling.
+        for line in src.lines() {
+            if line.contains("#par[inside]") {
+                assert!(
+                    line.starts_with("#bp-twocol("),
+                    "child must live inside the container call, got: {line}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn empty_two_column_emits_helper_call_but_no_cells() {
+        let b = container("two_column", json!({}), vec![]);
+        let src = doc(&[b]);
+        // The call is present (the helper guards emptiness at render time) but
+        // carries no bracketed cell.
+        assert!(src.contains("#bp-twocol()"));
+    }
+
+    #[test]
+    fn callout_wraps_children_with_box_and_escaped_title() {
+        let b = container(
+            "callout",
+            json!({ "title": "Bønn" }),
+            vec![RenderBlock::leaf(
+                "text",
+                json!({ "text": "Vår Far i himmelen" }),
+            )],
+        );
+        let src = doc(&[b]);
+        let call = src
+            .lines()
+            .find(|l| l.starts_with("#bp-callout("))
+            .expect("callout call emitted");
+        assert!(call.starts_with("#bp-callout([Bønn]"), "title is first arg");
+        assert!(
+            call.contains("#par[Vår Far i himmelen]"),
+            "child rendered inside the callout"
+        );
+    }
+
+    #[test]
+    fn callout_falls_back_to_role_then_none_for_title() {
+        let with_role = container("callout", json!({ "role": "note" }), vec![]);
+        assert!(doc(&[with_role]).contains("#bp-callout([note])"));
+        let bare = container("callout", json!({}), vec![]);
+        assert!(doc(&[bare]).contains("#bp-callout(none)"));
+    }
+
+    #[test]
+    fn callout_title_cannot_inject_markup() {
+        let b = container(
+            "callout",
+            json!({ "title": "x] #panic() [y" }),
+            vec![RenderBlock::leaf("text", json!({ "text": "ok" }))],
+        );
+        let src = doc(&[b]);
+        assert!(src.contains("\\]"), "closing bracket escaped");
+        assert!(src.contains("\\#panic"), "function call neutralised");
+        assert!(!src.contains("[x] #panic"), "raw injection impossible");
+    }
+
+    #[test]
+    fn nested_container_in_container_keeps_every_child() {
+        // A two_column whose left cell is itself a callout containing a child.
+        let inner = container(
+            "callout",
+            json!({ "title": "Note" }),
+            vec![RenderBlock::leaf("text", json!({ "text": "deep" }))],
+        );
+        let outer = container(
+            "two_column",
+            json!({}),
+            vec![
+                inner,
+                RenderBlock::leaf("text", json!({ "text": "right side" })),
+            ],
+        );
+        let src = doc(&[outer]);
+        // The nested callout call appears INSIDE the twocol call (one logical
+        // line — render_block trims the child's trailing newlines).
+        let call = src
+            .lines()
+            .find(|l| l.starts_with("#bp-twocol("))
+            .expect("twocol call emitted");
+        assert!(call.contains("#bp-callout([Note]"), "inner callout nested");
+        assert!(call.contains("#par[deep]"), "deepest child never dropped");
+        assert!(call.contains("#par[right side]"), "sibling cell preserved");
+        // And the whole document stays bracket-balanced.
+        assert_eq!(
+            unescaped_bracket_depth(&src),
+            unescaped_bracket_depth(&build_typst_document(&LayoutMeta::default(), &[])),
+            "nested containers keep the document at the preamble baseline"
+        );
+    }
+
+    #[test]
+    fn flat_non_container_children_are_unchanged() {
+        // A plain (non-container) block with children keeps the old "render self,
+        // then children flat after" behaviour — containers are the only thing
+        // that changed.
+        let parent = container(
+            "liturgy",
+            json!({ "title": "Section" }),
+            vec![RenderBlock::leaf("text", json!({ "text": "child line" }))],
+        );
+        let src = doc(&[parent]);
+        let p = src.find("#bp-heading([Section])").unwrap();
+        let c = src.find("#par[child line]").unwrap();
+        assert!(p < c, "parent precedes its flat child");
+        // The child is its own line, NOT swallowed into a container call.
+        assert!(
+            src.lines().any(|l| l.trim() == "#par[child line]"),
+            "child renders as a flat sibling line"
+        );
+    }
+
     // --- property fuzzing -----------------------------------------------------
     //
     // Deterministic property tests over the Typst injection-safety contract.
@@ -1559,6 +1824,8 @@ mod tests {
             "checkbox",
             "signature",
             "table",
+            "two_column",
+            "callout",
             "text",
             "totally_unknown",
         ];
@@ -1581,6 +1848,7 @@ mod tests {
             "url",
             "synopsis",
             "preacher",
+            "role",
         ];
 
         fn build(rng: &mut SplitMix64, depth: usize) -> RenderBlock {
