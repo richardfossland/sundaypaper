@@ -329,6 +329,19 @@ export const bulletin = {
    *  list its blocks via `ipc.block.list`. */
   generate: (projectId: string, plan: ServicePlan, title?: string) =>
     call<Document>("bulletin_generate", { projectId, plan, title }),
+  /** Generate a `program` document from a *canonical* SundayPlan service plan
+   *  handed over as a JSON string (already fetched from SundayPlan, or pasted by
+   *  the operator — no network fetch happens here). The backend deserialises the
+   *  published `sunday-contracts` ServicePlan, runs the pure Plan→Paper adapter,
+   *  and persists the blocks. Returns the new doc; list its blocks via
+   *  `ipc.block.list`. Rejects malformed JSON with a "json" IPCError and an empty
+   *  plan with a "validation" IPCError. */
+  generateFromPlan: (projectId: string, planJson: string, title?: string) =>
+    call<Document>("bulletin_generate_from_plan", {
+      projectId,
+      planJson,
+      title,
+    }),
   /** Render a document's block tree to Typst source. `layoutMeta` is optional;
    *  when omitted the document's page size seeds the page metadata. */
   render: (docId: string, layoutMeta?: LayoutMeta) =>

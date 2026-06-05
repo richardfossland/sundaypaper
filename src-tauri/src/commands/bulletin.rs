@@ -11,7 +11,8 @@ use tauri::State;
 
 use crate::error::AppResult;
 use crate::services::block::{Block, BlockRepo};
-use crate::services::bulletin::{build_bulletin, ServicePlan};
+use crate::services::bulletin::{build_bulletin, BlockSpec, ServicePlan};
+use crate::services::bulletin_contract::{bulletin_from_contract, ContractServicePlan};
 use crate::services::document::{Document, DocumentRepo};
 use crate::services::layout::engine;
 use crate::services::layout::markup::{build_typst_document, LayoutMeta, RenderBlock};
@@ -52,11 +53,78 @@ pub async fn bulletin_generate(
             .filter(|s| !s.is_empty()))
         .unwrap_or("Service Program");
 
+    persist_program(&state, &project_id, doc_title, &specs).await
+}
+
+/// Generate a printable program document from a *canonical* SundayPlan service
+/// plan handed over as JSON — the wired Plan→Paper bridge.
+///
+/// The renderer passes the published `sunday-contracts` `ServicePlan` as a JSON
+/// string (already fetched from SundayPlan, or pasted by the operator — this
+/// command does **no** network fetch, that transport stays out of scope). We
+/// deserialise it into [`ContractServicePlan`], run the pure, tested
+/// [`bulletin_from_contract`] adapter to get ordered [`BlockSpec`]s, then persist
+/// them through the exact same `persist_program` path `bulletin_generate` uses.
+///
+/// Steps, in order:
+/// 1. `serde_json::from_str` → [`ContractServicePlan`] (a malformed plan fails
+///    fast as a `json` error before anything is created).
+/// 2. `bulletin_from_contract(plan)` — pure mapping to ordered block specs
+///    (validates the plan has at least one item).
+/// 3. Persist a `program` document plus one top-level block per spec, in order.
+///
+/// Returns the created `program` document; the renderer lists its blocks via the
+/// existing `block_list` command, exactly as with `bulletin_generate`.
+#[tauri::command]
+pub async fn bulletin_generate_from_plan(
+    state: State<'_, AppState>,
+    project_id: String,
+    plan_json: String,
+    title: Option<String>,
+) -> AppResult<Document> {
+    // Deserialise the canonical contract plan first: a bad paste fails as a
+    // `json` error before we touch the database.
+    let plan: ContractServicePlan = serde_json::from_str(&plan_json)?;
+
+    // Pure adapter: canonical contract → ordered block specs (rejects an empty
+    // plan via build_bulletin) before any I/O.
+    let specs = bulletin_from_contract(plan.clone())?;
+
+    // Title: explicit arg → plan's service name → default. Trim so a blank arg
+    // doesn't slip past the repo's "title is required" check.
+    let doc_title = title
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or(plan
+            .service
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty()))
+        .unwrap_or("Service Program");
+
+    persist_program(&state, &project_id, doc_title, &specs).await
+}
+
+/// Persist ordered [`BlockSpec`]s as a fresh `program` document: create the
+/// document in `project_id`, then create one top-level block per spec, in order.
+///
+/// The single block-insert path shared by `bulletin_generate` (local plan) and
+/// `bulletin_generate_from_plan` (canonical contract plan), so neither command
+/// duplicates persistence logic. `BlockRepo::create` appends, so insertion order
+/// is preserved as each block's `position`.
+async fn persist_program(
+    state: &AppState,
+    project_id: &str,
+    title: &str,
+    specs: &[BlockSpec],
+) -> AppResult<Document> {
     let docs = DocumentRepo::new(state.db.clone());
-    let document = docs.create(&project_id, doc_title, "program", "A4").await?;
+    let document = docs.create(project_id, title, "program", "A4").await?;
 
     let blocks = BlockRepo::new(state.db.clone());
-    for spec in &specs {
+    for spec in specs {
         // Top-level blocks (parent_id = None); create() appends so the loop
         // order becomes the printed order.
         blocks
@@ -344,6 +412,110 @@ mod tests {
         assert_eq!(blocks[1].kind, "liturgy"); // welcome
         assert_eq!(blocks[2].kind, "song");
         assert_eq!(blocks[3].kind, "liturgy"); // benediction
+    }
+
+    // --- bulletin_generate_from_plan -----------------------------------------
+    // The canonical Plan→Paper bridge. The pure mapping (contract → BlockSpec)
+    // is exhaustively tested in `services::bulletin_contract`; here we prove the
+    // *command's seam*: the golden contract JSON deserialises into
+    // `ContractServicePlan`, the adapter runs, and the specs land as ordered
+    // blocks through the same persistence path the command uses. The command
+    // itself takes `State<'_, AppState>` (not constructible in a unit test), so —
+    // like the `bulletin_generate` tests above — we drive the identical sequence
+    // (from_str → bulletin_from_contract → create document → create blocks)
+    // against a temp in-memory db.
+
+    /// The shared platform golden fixture, the exact JSON a real SundayPlan
+    /// hands over. Vendored into this repo's test tree (kept byte-identical to
+    /// `sunday-platform/fixtures/service_plan.json`).
+    const GOLDEN_PLAN: &str = include_str!("../../tests/fixtures/service_plan.json");
+
+    async fn persist_contract(db: &Db, project_id: &str, plan_json: &str) -> Document {
+        // Mirror `bulletin_generate_from_plan` exactly: deserialise the canonical
+        // contract JSON, run the pure adapter, then persist via the same insert
+        // sequence the command performs.
+        let plan: crate::services::bulletin_contract::ContractServicePlan =
+            serde_json::from_str(plan_json).unwrap();
+        let specs =
+            crate::services::bulletin_contract::bulletin_from_contract(plan.clone()).unwrap();
+        let doc_title = plan
+            .service
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Service Program");
+        let docs = DocumentRepo::new(db.clone());
+        let document = docs
+            .create(project_id, doc_title, "program", "A4")
+            .await
+            .unwrap();
+        let blocks = BlockRepo::new(db.clone());
+        for spec in &specs {
+            blocks
+                .create(&document.id, None, &spec.kind, &spec.data)
+                .await
+                .unwrap();
+        }
+        document
+    }
+
+    #[tokio::test]
+    async fn from_plan_deserialises_golden_fixture_then_persists_blocks_in_order() {
+        let db = Db::connect_memory().await.unwrap();
+        let pid = project(&db).await;
+        let doc = persist_contract(&db, &pid, GOLDEN_PLAN).await;
+
+        // The service name became the document title (header path).
+        assert_eq!(doc.kind, "program");
+        assert_eq!(doc.title, "Sunday Morning");
+
+        let blocks = BlockRepo::new(db.clone())
+            .list_by_document(&doc.id)
+            .await
+            .unwrap();
+        // header + 3 fixture items (welcome → song → scripture).
+        assert_eq!(blocks.len(), 4);
+        let positions: Vec<i64> = blocks.iter().map(|b| b.position).collect();
+        assert_eq!(positions, vec![0, 1, 2, 3]);
+        let kinds: Vec<&str> = blocks.iter().map(|b| b.kind.as_str()).collect();
+        assert_eq!(kinds, vec!["heading", "liturgy", "song", "scripture"]);
+
+        // Spot-check the song payload survived the adapter + persistence verbatim.
+        let song = blocks.iter().find(|b| b.kind == "song").unwrap();
+        let data: serde_json::Value = serde_json::from_str(&song.data).unwrap();
+        assert_eq!(data["title"], "Amazing Grace");
+        assert_eq!(data["songId"], "22222222-2222-2222-2222-222222222222");
+        assert_eq!(data["number"], "22025");
+    }
+
+    #[tokio::test]
+    async fn from_plan_all_blocks_are_top_level() {
+        let db = Db::connect_memory().await.unwrap();
+        let pid = project(&db).await;
+        let doc = persist_contract(&db, &pid, GOLDEN_PLAN).await;
+        let blocks = BlockRepo::new(db.clone())
+            .list_by_document(&doc.id)
+            .await
+            .unwrap();
+        assert!(blocks.iter().all(|b| b.parent_id.is_none()));
+    }
+
+    #[tokio::test]
+    async fn from_plan_rejects_malformed_json_before_touching_db() {
+        use crate::services::bulletin_contract::{bulletin_from_contract, ContractServicePlan};
+
+        // A bad paste must fail as a `json` error in the deserialise step (the
+        // command's `?`), before any document is created.
+        let parsed = serde_json::from_str::<ContractServicePlan>("{ not valid json");
+        assert!(parsed.is_err(), "malformed JSON fails the deserialise step");
+
+        // And an empty (but valid) contract plan is rejected by the adapter, so
+        // the command bails before persisting anything.
+        assert!(
+            bulletin_from_contract(ContractServicePlan::default()).is_err(),
+            "empty plan → no document"
+        );
     }
 
     // --- bulletin_render -----------------------------------------------------

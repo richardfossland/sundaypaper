@@ -23,6 +23,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
+  ClipboardPaste,
   FilePlus2,
   FileText,
   FolderPlus,
@@ -46,6 +47,8 @@ export function BuilderPage() {
   const [newProjectName, setNewProjectName] = useState("");
   const [doc, setDoc] = useState<Document | null>(null);
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
+  const [planJson, setPlanJson] = useState("");
+  const [showImport, setShowImport] = useState(false);
 
   // ── Projects ──────────────────────────────────────────────────────────────
   const projects = useQuery({
@@ -69,6 +72,23 @@ export function BuilderPage() {
       if (plan.items.length === 0)
         throw new Error("Planen har ingen poster å bygge fra.");
       return ipc.bulletin.generate(projectId, plan, plan.title ?? undefined);
+    },
+    onSuccess: (d) => {
+      setDoc(d);
+      setPdfBase64(null);
+    },
+  });
+
+  // ── Alt step 2: import a canonical SundayPlan as pasted JSON ─────────────────
+  // The wired Plan→Paper bridge. The operator pastes the published
+  // `sunday-contracts` ServicePlan (already fetched from SundayPlan — no network
+  // fetch happens here) and the backend adapts + persists it into a program.
+  const importPlan = useMutation({
+    mutationFn: () => {
+      if (!projectId) throw new Error("Velg et prosjekt først.");
+      const json = planJson.trim();
+      if (!json) throw new Error("Lim inn en plan (JSON) først.");
+      return ipc.bulletin.generateFromPlan(projectId, json);
     },
     onSuccess: (d) => {
       setDoc(d);
@@ -214,6 +234,62 @@ export function BuilderPage() {
               )}
               Generer dokument
             </button>
+
+            {/* Alt path: import a canonical SundayPlan as pasted JSON. */}
+            <div className="rounded-lg border border-dashed border-[var(--color-border)] p-3">
+              <button
+                type="button"
+                onClick={() => setShowImport((v) => !v)}
+                aria-expanded={showImport}
+                className="flex w-full items-center gap-2 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)]"
+              >
+                <ClipboardPaste size={13} />
+                Importer fra plan (lim inn JSON)
+              </button>
+
+              {showImport && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-[var(--color-fg-muted)]">
+                    Lim inn en gudstjenesteplan fra SundayPlan (JSON). Planen
+                    hentes ikke over nett her — kopier den inn manuelt.
+                  </p>
+                  <textarea
+                    aria-label="Plan-JSON"
+                    value={planJson}
+                    placeholder='{ "service": { "name": "Høymesse" }, "items": [ … ] }'
+                    disabled={importPlan.isPending}
+                    rows={5}
+                    onChange={(e) => setPlanJson(e.target.value)}
+                    className="w-full resize-y rounded-md border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-2.5 py-1.5 font-mono text-xs disabled:opacity-50"
+                  />
+
+                  {importPlan.isError && (
+                    <ErrorBanner
+                      message={errMessage(
+                        importPlan.error,
+                        "Kunne ikke importere planen",
+                      )}
+                    />
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => importPlan.mutate()}
+                    disabled={
+                      !projectId || !planJson.trim() || importPlan.isPending
+                    }
+                    className="flex w-full items-center justify-center gap-2 rounded-md border border-[var(--color-border)] px-3 py-2 text-sm font-semibold transition-colors hover:text-[var(--color-fg)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {importPlan.isPending ? (
+                      <Loader2 size={15} className="animate-spin" />
+                    ) : (
+                      <ClipboardPaste size={15} />
+                    )}
+                    Importer plan
+                  </button>
+                </div>
+              )}
+            </div>
 
             {doc && (
               <div className="space-y-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-surface)] p-3">

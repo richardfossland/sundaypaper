@@ -36,7 +36,12 @@ const { ipcMock, FakeIPCError } = vi.hoisted(() => {
     FakeIPCError,
     ipcMock: {
       project: { list: vi.fn(), create: vi.fn() },
-      bulletin: { generate: vi.fn(), render: vi.fn(), typstCompile: vi.fn() },
+      bulletin: {
+        generate: vi.fn(),
+        generateFromPlan: vi.fn(),
+        render: vi.fn(),
+        typstCompile: vi.fn(),
+      },
     },
   };
 });
@@ -107,6 +112,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   ipcMock.project.list.mockResolvedValue([PROJECT]);
   ipcMock.bulletin.generate.mockResolvedValue(DOC);
+  ipcMock.bulletin.generateFromPlan.mockResolvedValue(DOC);
   ipcMock.bulletin.render.mockResolvedValue("#set page()\nHei");
   ipcMock.bulletin.typstCompile.mockResolvedValue(PDF_B64);
 });
@@ -204,6 +210,38 @@ describe("BuilderPage", () => {
     expect(
       screen.queryByRole("link", { name: /Last ned PDF/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("imports a pasted SundayPlan JSON into a program document", async () => {
+    renderPage();
+    await screen.findByRole("option", { name: "Sommer 2026" });
+    selectProject();
+
+    // Reveal the import affordance.
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Importer fra plan \(lim inn JSON\)/,
+      }),
+    );
+
+    const plan = '{ "service": { "name": "Høymesse" }, "items": [] }';
+    fireEvent.change(screen.getByLabelText("Plan-JSON"), {
+      target: { value: plan },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Importer plan$/ }));
+
+    await waitFor(() =>
+      expect(ipcMock.bulletin.generateFromPlan).toHaveBeenCalledWith(
+        "proj-1",
+        plan,
+      ),
+    );
+
+    // The document card appears once the import resolves.
+    expect(
+      await screen.findByRole("button", { name: /Lag PDF/ }),
+    ).toBeInTheDocument();
   });
 
   it("matches the empty-state snapshot", async () => {
