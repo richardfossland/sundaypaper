@@ -2342,4 +2342,50 @@ mod tests {
             }
         }
     }
+
+    /// Prove-first (security): a document title / body carrying the canonical
+    /// Typst-injection payload — `#`, `[`, `]`, `$`, and a `#eval("…")` call that
+    /// would execute arbitrary Typst if it reached the source raw — is fully
+    /// neutralised by `escape_content`. This is the exact path the batch export
+    /// (`build_typst_document`) drives a document title/content through, so it
+    /// records that the alleged "Typst injection via document title/content" is
+    /// NOT exploitable: every special char is backslash-escaped and the
+    /// `#eval(...)` never appears as a live function call.
+    #[test]
+    fn document_title_and_content_cannot_inject_typst_eval() {
+        let payload = r#"#eval("1+1") [x] $a$ #set page(margin: 0pt)"#;
+        let blocks = [
+            RenderBlock::leaf("heading", json!({ "title": payload })),
+            RenderBlock::leaf("text", json!({ "title": payload, "text": payload })),
+        ];
+        let src = doc(&blocks);
+
+        // The dangerous tokens are present only in escaped form.
+        assert!(src.contains("\\#eval"), "#eval call is neutralised");
+        assert!(
+            !src.contains("[x] $a$"),
+            "raw bracket/math injection impossible"
+        );
+        // No live `#eval(` / `#set ` reaches the source from user content: every
+        // occurrence of `#eval` and `#set` that is NOT one of our own preamble
+        // directives must be backslash-escaped. We assert the only un-escaped
+        // `#set ` lines are the three preamble directives the builder emits.
+        let unescaped = |needle: &str| {
+            src.match_indices(needle)
+                .filter(|(i, _)| *i == 0 || &src[i - 1..*i] != "\\")
+                .count()
+        };
+        assert_eq!(
+            unescaped("#eval"),
+            0,
+            "no un-escaped #eval from user content"
+        );
+        // The only un-escaped `#set ` directives are the three the preamble
+        // emits itself; the user-supplied `#set page(...)` is escaped to `\#set`.
+        assert_eq!(
+            unescaped("#set "),
+            3,
+            "only the 3 preamble #set directives are live; user #set is escaped"
+        );
+    }
 }

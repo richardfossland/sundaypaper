@@ -41,6 +41,35 @@ pub struct AssetInput<'a> {
     pub fingerprint: Option<&'a str>,
 }
 
+/// The content-types the asset library accepts. The library holds document
+/// media only — raster/vector images, PDFs, and font files — so an import
+/// claiming any other type (an executable, a shell script, HTML, …) is refused
+/// before it can be registered, later fed to the layout engine's `image()`
+/// calls, or opened via `path_for_open`. A `None` mime is allowed (best-effort
+/// import where the type is unknown); only an explicitly disallowed type is
+/// rejected. Comparison is case-insensitive and ignores any `; charset=…`
+/// parameter suffix.
+fn is_allowed_mime(mime: &str) -> bool {
+    let base = mime
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    // Any image/* or font/* is a document asset; PDF is allowed explicitly.
+    base.starts_with("image/")
+        || base.starts_with("font/")
+        || matches!(
+            base.as_str(),
+            "application/pdf"
+                | "application/font-woff"
+                | "application/font-woff2"
+                | "application/x-font-ttf"
+                | "application/x-font-otf"
+                | "application/vnd.ms-opentype"
+        )
+}
+
 pub struct AssetRepo {
     db: Db,
 }
@@ -57,6 +86,13 @@ impl AssetRepo {
         }
         if input.path.trim().is_empty() {
             return Err(AppError::Validation("asset path is required".into()));
+        }
+        if let Some(mime) = input.mime {
+            if !is_allowed_mime(mime) {
+                return Err(AppError::Validation(format!(
+                    "unsupported asset type '{mime}'; only images, PDFs and fonts are allowed"
+                )));
+            }
         }
         let id = Uuid::now_v7().to_string();
         let now = now_ms();
@@ -206,6 +242,60 @@ mod tests {
             repo.get(&a.id).await.unwrap_err(),
             AppError::NotFound { .. }
         ));
+    }
+
+    #[tokio::test]
+    async fn create_rejects_disallowed_mime_type() {
+        // Prove-first (security): the asset library should only accept document
+        // media — images, PDFs, fonts. An import claiming an executable / script
+        // / HTML content-type must be refused, not silently registered (these
+        // would later feed the layout engine's `image()` calls and the
+        // `path_for_open` "open this file" flow).
+        let repo = repo().await;
+        for bad in [
+            "application/x-msdownload",
+            "application/x-sh",
+            "text/html",
+            "application/javascript",
+        ] {
+            let mut input = logo();
+            input.mime = Some(bad);
+            let err = repo.create(input).await.unwrap_err();
+            assert!(
+                matches!(err, AppError::Validation(_)),
+                "expected disallowed mime {bad:?} to be rejected"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn create_accepts_allowed_document_mime_types() {
+        let repo = repo().await;
+        for ok in [
+            "image/png",
+            "image/jpeg",
+            "image/svg+xml",
+            "application/pdf",
+            "font/ttf",
+            "font/otf",
+        ] {
+            let mut input = logo();
+            input.mime = Some(ok);
+            assert!(
+                repo.create(input).await.is_ok(),
+                "expected allowed mime {ok:?} to be accepted"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn create_accepts_absent_mime() {
+        // A missing content-type is allowed (best-effort import); only an
+        // explicitly disallowed type is rejected.
+        let repo = repo().await;
+        let mut input = logo();
+        input.mime = None;
+        assert!(repo.create(input).await.is_ok());
     }
 
     #[tokio::test]
