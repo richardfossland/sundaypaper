@@ -17,7 +17,10 @@
 //!     pdfium engine behind the `pdf` feature
 //!
 //! Bridges (pure, always-on):
-//!   - `bulletin`  ServicePlan (from SundayPlan) → program block specs
+//!   - `bulletin` local ServicePlan mirror → program block specs
+//!   - `bulletin_contract` published `sunday-contracts` ServicePlan → the local
+//!     mirror → `bulletin` (the canonical Plan→Paper adapter; golden-fixture
+//!     round-trip tested)
 //!
 //! Planned modules (added in their phases):
 //!   - `ocr`    Tesseract pipeline for scanned songbooks (Phase 3.1)
@@ -28,6 +31,7 @@ pub mod asset;
 pub mod asset_lib;
 pub mod block;
 pub mod bulletin;
+pub mod bulletin_contract;
 pub mod db;
 pub mod doc_template;
 pub mod document;
