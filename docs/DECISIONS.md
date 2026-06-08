@@ -45,7 +45,7 @@ Lightweight ADRs. Newest first. Copy the template for each new decision.
 - **Decision:** Gate each behind an optional cargo feature (`pdf`, `ocr`, `ai`).
   The default build compiles without them; pure logic (parsers, request builders,
   cost math) stays outside the gate and is unit-tested; the gated path stubs out
-  with a clear error when the feature is off. Mirrors Verbatim/SundayStage.
+  with a clear error when the feature is off. Mirrors SundayEdit/SundayStage.
 - **Consequences:** Fast default builds and green CI without secrets. Real
   functionality needs `--features …`. Distribution (Phase 9) builds with the
   full feature set + bundled binaries.

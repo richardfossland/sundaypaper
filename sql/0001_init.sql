@@ -33,7 +33,7 @@ CREATE TABLE template (
 
 -- A file asset in the library: logo, image, font, scanned PDF, ... Local-first:
 -- `path` is an absolute path on THIS device; `fingerprint` is the O(1) content
--- fingerprint used to relink moved files (same pattern as Verbatim/SundayStage).
+-- fingerprint used to relink moved files (same pattern as SundayEdit/SundayStage).
 CREATE TABLE asset (
     id          TEXT PRIMARY KEY NOT NULL,
     kind        TEXT NOT NULL,                  -- image | font | pdf | logo | ...

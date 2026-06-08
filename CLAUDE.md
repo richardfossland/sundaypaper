@@ -92,7 +92,7 @@ docs/                  ARCHITECTURE.md, DECISIONS.md
 - Error handling: `thiserror`-based `AppError`, never `unwrap()` in production code.
 - Heavy/native deps (pdfium, Tesseract, the Anthropic client) sit behind
   **optional cargo features**; the default build compiles without them and a
-  stub returns a clear error. Mirrors the Verbatim/SundayStage pattern.
+  stub returns a clear error. Mirrors the SundayEdit/SundayStage pattern.
 - TypeScript: strict mode, no `any`, no unused vars.
 
 ## Privacy is non-negotiable

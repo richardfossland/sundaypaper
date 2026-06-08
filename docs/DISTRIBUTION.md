@@ -1,6 +1,6 @@
 # SundayPaper — Distribution
 
-How SundayPaper is built, signed, and shipped. Mirrors the Verbatim /
+How SundayPaper is built, signed, and shipped. Mirrors the SundayEdit /
 SundayStage flow.
 
 ## Pipeline
