@@ -7,6 +7,7 @@
 //!
 //! Later phases add domain services (pdf, ocr, layout, ai) and their commands.
 
+pub mod account;
 pub mod commands;
 pub mod error;
 pub mod services;
@@ -52,6 +53,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            // Sunday Account (SSO) — shared cross-app session
+            commands::account::sunday_account_status,
+            commands::account::sunday_sign_out,
             commands::app::app_info,
             commands::project::project_create,
             commands::project::project_get,

@@ -4,6 +4,7 @@
 //! delegate to `services::*` for real work and return `Result<T, AppError>`.
 //! Naming convention: `entity_verb` (e.g. `app_info`, later `pdf_open`).
 
+pub mod account;
 pub mod app;
 pub mod asset;
 pub mod asset_lib;
