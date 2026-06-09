@@ -11,7 +11,7 @@
  *   --text-doc-*  preview of the document body we actually render to PDF
  *
  * ACCENT: SundayPaper defaults to "copper" (warm, printerly — ink on paper),
- * deliberately distinct from SundayStage's gold and Verbatim's teal. The
+ * deliberately distinct from SundayStage's gold and SundayEdit's teal. The
  * accent is a single alias (`--color-accent`) so it can be re-pointed to any
  * of the candidate scales below in one line once the brand accent is picked.
  */

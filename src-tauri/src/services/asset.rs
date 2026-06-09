@@ -1,7 +1,7 @@
 //! Asset repository — files in the library (logo, image, font, scanned PDF).
 //! Local-first: `path` is an absolute path on this device and `fingerprint` is
 //! the O(1) content fingerprint used to relink a file that has moved (same
-//! pattern as Verbatim/SundayStage). Soft-delete via `deleted_at`.
+//! pattern as SundayEdit/SundayStage). Soft-delete via `deleted_at`.
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
