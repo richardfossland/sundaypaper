@@ -74,6 +74,7 @@ pub fn run() {
             commands::block::block_reorder,
             commands::block::block_reparent,
             commands::block::block_delete,
+            commands::ai::ai_compile_intent,
             commands::bulletin::bulletin_generate,
             commands::bulletin::bulletin_generate_from_plan,
             commands::bulletin::bulletin_render,

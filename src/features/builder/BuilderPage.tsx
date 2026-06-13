@@ -49,6 +49,8 @@ export function BuilderPage() {
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
   const [planJson, setPlanJson] = useState("");
   const [showImport, setShowImport] = useState(false);
+  const [intent, setIntent] = useState("");
+  const [showAi, setShowAi] = useState(false);
 
   // ── Projects ──────────────────────────────────────────────────────────────
   const projects = useQuery({
@@ -89,6 +91,26 @@ export function BuilderPage() {
       const json = planJson.trim();
       if (!json) throw new Error("Lim inn en plan (JSON) først.");
       return ipc.bulletin.generateFromPlan(projectId, json);
+    },
+    onSuccess: (d) => {
+      setDoc(d);
+      setPdfBase64(null);
+    },
+  });
+
+  // ── Alt step 2: compile a free-text intent into a program with Claude ───────
+  // The Intent→Layout AI compiler. The operator describes the service in plain
+  // language ("lag søndagens program med to salmer og dåp") and the backend asks
+  // Claude for a block tree, then persists it through the SAME pipeline as the
+  // manual builder. Consent-gated + key-gated server-side: if Sky-AI is off or no
+  // key is set, the command rejects with a clear "AI ikke aktivert" message and
+  // nothing here changes — the manual builder is unaffected.
+  const compileIntent = useMutation({
+    mutationFn: () => {
+      if (!projectId) throw new Error("Velg et prosjekt først.");
+      const text = intent.trim();
+      if (!text) throw new Error("Skriv en intensjon først.");
+      return ipc.ai.compileIntent(projectId, text);
     },
     onSuccess: (d) => {
       setDoc(d);
@@ -234,6 +256,63 @@ export function BuilderPage() {
               )}
               Generer dokument
             </button>
+
+            {/* Alt path: AI intent → program. The prompt bar. */}
+            <div className="rounded-lg border border-dashed border-[var(--color-border)] p-3">
+              <button
+                type="button"
+                onClick={() => setShowAi((v) => !v)}
+                aria-expanded={showAi}
+                className="flex w-full items-center gap-2 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:text-[var(--color-fg)]"
+              >
+                <Sparkles size={13} />
+                Lag med AI (beskriv gudstjenesten)
+              </button>
+
+              {showAi && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-[var(--color-fg-muted)]">
+                    Beskriv gudstjenesten med egne ord, så foreslår Claude et
+                    program du kan redigere videre. Krever at Sky-AI er slått på
+                    i innstillinger. Skjema- og medlemsdata sendes aldri.
+                  </p>
+                  <textarea
+                    aria-label="AI-intensjon"
+                    value={intent}
+                    placeholder="F.eks. «lag søndagens program for 1. søndag i advent med to salmer og dåp»"
+                    disabled={compileIntent.isPending}
+                    rows={3}
+                    onChange={(e) => setIntent(e.target.value)}
+                    className="w-full resize-y rounded-md border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-2.5 py-1.5 text-sm disabled:opacity-50"
+                  />
+
+                  {compileIntent.isError && (
+                    <ErrorBanner
+                      message={errMessage(
+                        compileIntent.error,
+                        "Kunne ikke lage program med AI",
+                      )}
+                    />
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => compileIntent.mutate()}
+                    disabled={
+                      !projectId || !intent.trim() || compileIntent.isPending
+                    }
+                    className="flex w-full items-center justify-center gap-2 rounded-md border border-[var(--color-accent)] px-3 py-2 text-sm font-semibold text-[var(--color-accent)] transition-colors hover:bg-[color-mix(in_oklch,var(--color-accent)_10%,transparent)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {compileIntent.isPending ? (
+                      <Loader2 size={15} className="animate-spin" />
+                    ) : (
+                      <Sparkles size={15} />
+                    )}
+                    Lag program med AI
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Alt path: import a canonical SundayPlan as pasted JSON. */}
             <div className="rounded-lg border border-dashed border-[var(--color-border)] p-3">

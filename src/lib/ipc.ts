@@ -353,6 +353,21 @@ export const bulletin = {
   typstCompile: (source: string) => call<string>("typst_compile", { source }),
 };
 
+// ── Intent→Layout AI compiler (Phase 5) ──────────────────────────────────────
+// Free-text intent → a populated `program` document of blocks, via the Anthropic
+// Messages API (server-side, key never in this bundle). The generated tree flows
+// through the SAME persistence + render pipeline as the manual builder. Needs a
+// build with the `ai` cargo feature, cloud-AI consent enabled, and a key set;
+// otherwise rejects with a "feature_disabled" (or "validation") IPCError carrying
+// the user-facing "AI ikke aktivert" message.
+
+export const ai = {
+  /** Compile a free-text intent into a new `program` document. Returns the new
+   *  doc; list its blocks via `ipc.block.list` and render via `ipc.bulletin`. */
+  compileIntent: (projectId: string, intent: string, title?: string) =>
+    call<Document>("ai_compile_intent", { projectId, intent, title }),
+};
+
 // ── Batch export (Phase 6) ───────────────────────────────────────────────────
 // Render a set of documents to PDF files in one pass, applying one set of
 // options (paper size, large-print scaling, language) to all of them. Reuses
@@ -396,6 +411,7 @@ export const ipc = {
   pdf,
   pdfOps,
   bulletin,
+  ai,
   exporter,
   sangbok,
 };

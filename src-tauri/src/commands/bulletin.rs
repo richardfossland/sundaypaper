@@ -114,7 +114,7 @@ pub async fn bulletin_generate_from_plan(
 /// `bulletin_generate_from_plan` (canonical contract plan), so neither command
 /// duplicates persistence logic. `BlockRepo::create` appends, so insertion order
 /// is preserved as each block's `position`.
-async fn persist_program(
+pub(crate) async fn persist_program(
     state: &AppState,
     project_id: &str,
     title: &str,
