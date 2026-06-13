@@ -5,6 +5,7 @@
 //! Naming convention: `entity_verb` (e.g. `app_info`, later `pdf_open`).
 
 pub mod account;
+pub mod ai;
 pub mod app;
 pub mod asset;
 pub mod asset_lib;

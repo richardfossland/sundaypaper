@@ -54,6 +54,15 @@ lopdf = { version = "0.40.0", optional = true }
 pdfium-render = { version = "0.9.1", optional = true, features = ["image_025"] }
 image = { version = "0.25.10", default-features = false, features = ["png"], optional = true }
 
+# AI intent→layout compiler (Phase 5.1), behind the `ai` feature — see
+# [features] below. `reqwest` is the only native dep: the Anthropic Messages
+# API client (rustls so no system OpenSSL). The request-builder and
+# response-parser are PURE and always compiled (`ai::prompt` / `ai::parse`);
+# only the HTTP transport lives behind the feature, and the default build's
+# stub returns a clear `feature_disabled` error so the manual builder is
+# unaffected.
+reqwest = { version = "0.12", optional = true, default-features = false, features = ["rustls-tls", "json"] }
+
 # Layout compilation (Phase 4.2), behind the `typst` feature — see [features]
 # below. `typst` is the embedded compiler + standard library; `typst-pdf`
 # exports the laid-out document to PDF bytes; `typst-assets` supplies a small
@@ -81,6 +90,13 @@ pdf = ["dep:lopdf", "dep:pdfium-render", "dep:image"]
 # enabled path needs no system fonts or files. Enable with
 # `cargo test --features typst`.
 typst = ["dep:typst", "dep:typst-pdf", "dep:typst-assets"]
+# AI intent→layout compiler (Phase 5.1) — free-text intent → a populated block
+# tree via Claude's tool-use, constrained to the existing BlockSpec catalogue,
+# flowing straight into build_bulletin → layout::markup → Typst. The default
+# build compiles without it and `ai::client::compile_intent` returns a clear
+# `feature_disabled` ("AI ikke aktivert") error; the always-on pure
+# request-builder + response-parser (`ai::prompt` / `ai::parse`) carry the test
+# coverage. Enable with `cargo test --features ai`.
+ai = ["dep:reqwest"]
 # Later phases add more optional native deps behind features:
-#   ai  = ["dep:reqwest"]   # Anthropic client (Phase 5)
 #   ocr = ["dep:leptess"]   # Tesseract OCR (Phase 3.1)

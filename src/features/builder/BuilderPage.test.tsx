@@ -42,6 +42,9 @@ const { ipcMock, FakeIPCError } = vi.hoisted(() => {
         render: vi.fn(),
         typstCompile: vi.fn(),
       },
+      ai: {
+        compileIntent: vi.fn(),
+      },
     },
   };
 });
@@ -115,6 +118,7 @@ beforeEach(() => {
   ipcMock.bulletin.generateFromPlan.mockResolvedValue(DOC);
   ipcMock.bulletin.render.mockResolvedValue("#set page()\nHei");
   ipcMock.bulletin.typstCompile.mockResolvedValue(PDF_B64);
+  ipcMock.ai.compileIntent.mockResolvedValue(DOC);
 });
 
 afterEach(() => cleanup());
@@ -175,6 +179,60 @@ describe("BuilderPage", () => {
       screen.getByRole("button", { name: /Generer dokument/ }),
     ).toBeDisabled();
     expect(ipcMock.bulletin.generate).not.toHaveBeenCalled();
+  });
+
+  it("compiles a free-text intent via the AI prompt bar", async () => {
+    renderPage();
+    await screen.findByRole("option", { name: "Sommer 2026" });
+    selectProject();
+
+    fireEvent.change(screen.getByLabelText("Beskriv programmet"), {
+      target: {
+        value: "lag søndagens program med to salmer og dåp",
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Lag med AI/ }));
+
+    await waitFor(() =>
+      expect(ipcMock.ai.compileIntent).toHaveBeenCalledWith(
+        "proj-1",
+        "lag søndagens program med to salmer og dåp",
+        expect.any(Object),
+      ),
+    );
+    // The generated document card appears, so the AI flow joins the same
+    // render→compile path as the manual builder.
+    await screen.findByRole("button", { name: /Lag PDF/ });
+  });
+
+  it("blocks AI compile until a project is selected", async () => {
+    renderPage();
+    await screen.findByRole("option", { name: "Sommer 2026" });
+
+    fireEvent.change(screen.getByLabelText("Beskriv programmet"), {
+      target: { value: "noe" },
+    });
+    // No project picked → the button stays disabled and nothing is sent.
+    expect(screen.getByRole("button", { name: /Lag med AI/ })).toBeDisabled();
+    expect(ipcMock.ai.compileIntent).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an AI-not-enabled error as a banner", async () => {
+    ipcMock.ai.compileIntent.mockRejectedValue(
+      new FakeIPCError("validation", "Sky-AI er ikke slått på."),
+    );
+    renderPage();
+    await screen.findByRole("option", { name: "Sommer 2026" });
+    selectProject();
+
+    fireEvent.change(screen.getByLabelText("Beskriv programmet"), {
+      target: { value: "lag noe" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Lag med AI/ }));
+
+    expect(
+      await screen.findByText(/Sky-AI er ikke slått på/),
+    ).toBeInTheDocument();
   });
 
   it("disables generate when the plan has no items", async () => {

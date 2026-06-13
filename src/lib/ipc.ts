@@ -353,6 +353,39 @@ export const bulletin = {
   typstCompile: (source: string) => call<string>("typst_compile", { source }),
 };
 
+// ── AI intent→layout compiler (Phase 5.1) ───────────────────────────────────
+// Free-text intent → a populated `program` document of blocks, via Claude's
+// tool-use (constrained to the existing block catalogue) flowing into the same
+// build→layout→Typst pipeline. Consent-gated (the "Sky-AI (Claude)" privacy
+// toggle) + needs an Anthropic key in Settings. Without consent/key it rejects
+// with a "validation" IPCError; a build without the `ai` cargo feature rejects
+// with "feature_disabled" ("AI ikke aktivert"). The manual builder is
+// unaffected either way.
+
+export const ai = {
+  /** Compile a free-text intent into a `program` document. `church` / `date` /
+   *  `lang` are optional context shared with the model (never form/member
+   *  data). Returns the new doc; list its blocks via `ipc.block.list`. */
+  compileIntent: (
+    projectId: string,
+    intent: string,
+    opts?: {
+      title?: string;
+      church?: string;
+      date?: string;
+      lang?: string;
+    },
+  ) =>
+    call<Document>("ai_compile_intent", {
+      projectId,
+      intent,
+      title: opts?.title,
+      church: opts?.church,
+      date: opts?.date,
+      lang: opts?.lang,
+    }),
+};
+
 // ── Batch export (Phase 6) ───────────────────────────────────────────────────
 // Render a set of documents to PDF files in one pass, applying one set of
 // options (paper size, large-print scaling, language) to all of them. Reuses
@@ -396,6 +429,7 @@ export const ipc = {
   pdf,
   pdfOps,
   bulletin,
+  ai,
   exporter,
   sangbok,
 };
