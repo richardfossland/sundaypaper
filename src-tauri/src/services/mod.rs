@@ -24,9 +24,17 @@
 //!
 //! Planned modules (added in their phases):
 //!   - `ocr`    Tesseract pipeline for scanned songbooks (Phase 3.1)
-//!   - `layout` Typst engine: block tree → PDF (Phase 4.2)
-//!   - `ai`     hybrid local/Claude provider (Phase 5.1)
+//!
+//! Phase 4.2:
+//!   - `layout` Typst engine: block tree → PDF
+//!
+//! Phase 5.1:
+//!   - `ai`     intent→layout compiler — free-text intent → BlockSpec tree via
+//!     Claude tool-use, then into the existing layout pipeline. Pure
+//!     request-builder/parser always on; the HTTP client behind the `ai`
+//!     feature.
 
+pub mod ai;
 pub mod asset;
 pub mod asset_lib;
 pub mod block;

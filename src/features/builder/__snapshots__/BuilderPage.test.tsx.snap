@@ -98,9 +98,98 @@ exports[`BuilderPage > matches the empty-state snapshot 1`] = `
           class="space-y-2"
         >
           <h2
+            class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--color-accent)]"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-sparkles"
+              fill="none"
+              height="13"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="13"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+              />
+              <path
+                d="M20 2v4"
+              />
+              <path
+                d="M22 4h-4"
+              />
+              <circle
+                cx="4"
+                cy="20"
+                r="2"
+              />
+            </svg>
+             AI · Skriv hva du vil ha
+          </h2>
+          <div
+            class="rounded-lg border border-[var(--color-accent)]/40 bg-[color-mix(in_oklch,var(--color-accent)_6%,transparent)] p-3"
+          >
+            <label
+              class="mb-1 block text-xs text-[var(--color-fg-muted)]"
+              for="ai-intent"
+            >
+              Beskriv programmet med egne ord — AI lager et utkast du kan redigere. Skjema- og medlemsdata sendes aldri.
+            </label>
+            <textarea
+              aria-label="Beskriv programmet"
+              class="w-full resize-y rounded-md border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-2.5 py-1.5 text-sm disabled:opacity-50"
+              id="ai-intent"
+              placeholder="Lag søndagens program for 1. søndag i advent med to salmer og dåp"
+              rows="3"
+            />
+            <button
+              class="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-[var(--color-accent)] px-3 py-2 text-sm font-bold text-[var(--color-accent-fg)] shadow-sm transition-all hover:brightness-110 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+              disabled=""
+              type="button"
+            >
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-sparkles"
+                fill="none"
+                height="15"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="15"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"
+                />
+                <path
+                  d="M20 2v4"
+                />
+                <path
+                  d="M22 4h-4"
+                />
+                <circle
+                  cx="4"
+                  cy="20"
+                  r="2"
+                />
+              </svg>
+              Lag med AI
+            </button>
+          </div>
+        </section>
+        <section
+          class="space-y-2"
+        >
+          <h2
             class="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]"
           >
-            2 · Plan
+            2 · Plan (manuelt)
           </h2>
           <div
             class="space-y-5"

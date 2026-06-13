@@ -49,6 +49,7 @@ export function BuilderPage() {
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
   const [planJson, setPlanJson] = useState("");
   const [showImport, setShowImport] = useState(false);
+  const [intent, setIntent] = useState("");
 
   // ── Projects ──────────────────────────────────────────────────────────────
   const projects = useQuery({
@@ -89,6 +90,28 @@ export function BuilderPage() {
       const json = planJson.trim();
       if (!json) throw new Error("Lim inn en plan (JSON) først.");
       return ipc.bulletin.generateFromPlan(projectId, json);
+    },
+    onSuccess: (d) => {
+      setDoc(d);
+      setPdfBase64(null);
+    },
+  });
+
+  // ── AI: compile a free-text intent into a program document ───────────────────
+  // The headline feature: free text → a populated block tree via Claude's
+  // tool-use, persisted through the same path the manual builder uses. Cloud AI
+  // is opt-in + needs an Anthropic key; the backend gates on both and returns a
+  // clear "Sky-AI er ikke slått på" / "AI ikke aktivert" message otherwise, so
+  // the manual builder below is never blocked.
+  const compileIntent = useMutation({
+    mutationFn: () => {
+      if (!projectId) throw new Error("Velg et prosjekt først.");
+      const text = intent.trim();
+      if (!text) throw new Error("Skriv inn et ønske først.");
+      return ipc.ai.compileIntent(projectId, text, {
+        church: plan.church ?? undefined,
+        date: plan.date ?? undefined,
+      });
     },
     onSuccess: (d) => {
       setDoc(d);
@@ -190,10 +213,63 @@ export function BuilderPage() {
             </form>
           </section>
 
+          {/* AI prompt bar — intent→layout compiler */}
+          <section className="space-y-2">
+            <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--color-accent)]">
+              <Sparkles size={13} /> AI · Skriv hva du vil ha
+            </h2>
+            <div className="rounded-lg border border-[var(--color-accent)]/40 bg-[color-mix(in_oklch,var(--color-accent)_6%,transparent)] p-3">
+              <label
+                htmlFor="ai-intent"
+                className="mb-1 block text-xs text-[var(--color-fg-muted)]"
+              >
+                Beskriv programmet med egne ord — AI lager et utkast du kan
+                redigere. Skjema- og medlemsdata sendes aldri.
+              </label>
+              <textarea
+                id="ai-intent"
+                aria-label="Beskriv programmet"
+                value={intent}
+                placeholder="Lag søndagens program for 1. søndag i advent med to salmer og dåp"
+                disabled={compileIntent.isPending}
+                rows={3}
+                onChange={(e) => setIntent(e.target.value)}
+                className="w-full resize-y rounded-md border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-2.5 py-1.5 text-sm disabled:opacity-50"
+              />
+
+              {compileIntent.isError && (
+                <div className="mt-2">
+                  <ErrorBanner
+                    message={errMessage(
+                      compileIntent.error,
+                      "Kunne ikke lage program med AI",
+                    )}
+                  />
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => compileIntent.mutate()}
+                disabled={
+                  !projectId || !intent.trim() || compileIntent.isPending
+                }
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-[var(--color-accent)] px-3 py-2 text-sm font-bold text-[var(--color-accent-fg)] shadow-sm transition-all hover:brightness-110 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {compileIntent.isPending ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <Sparkles size={15} />
+                )}
+                Lag med AI
+              </button>
+            </div>
+          </section>
+
           {/* Plan form */}
           <section className="space-y-2">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-muted)]">
-              2 · Plan
+              2 · Plan (manuelt)
             </h2>
             <ServicePlanForm
               plan={plan}
