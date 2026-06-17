@@ -214,7 +214,7 @@ fn block_tree_tool() -> Value {
     json!({
         "name": TOOL_NAME,
         "description": "Emit the ordered block tree for the program. Each block is one \
-top-level section of the printed program, in print order.",
+    top-level section of the printed program, in print order.",
         "input_schema": {
             "type": "object",
             "additionalProperties": false,
@@ -234,7 +234,7 @@ top-level section of the printed program, in print order.",
                             "data": {
                                 "type": "object",
                                 "description": "Kind-specific payload (title, text, etc.). \
-Use only the fields described for this kind; omit unknown fields."
+    Use only the fields described for this kind; omit unknown fields."
                             }
                         },
                         "required": ["kind", "data"]

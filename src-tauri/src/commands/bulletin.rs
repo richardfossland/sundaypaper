@@ -155,7 +155,9 @@ pub async fn bulletin_render(
     document_id: String,
     layout_meta: Option<LayoutMeta>,
 ) -> AppResult<String> {
-    let document = DocumentRepo::new(state.db.clone()).get(&document_id).await?;
+    let document = DocumentRepo::new(state.db.clone())
+        .get(&document_id)
+        .await?;
 
     let rows = BlockRepo::new(state.db.clone())
         .list_by_document(&document_id)
@@ -588,7 +590,10 @@ mod tests {
         let src = render(&db, &doc, None).await;
         assert!(src.contains("#set page(paper: \"a4\""));
         assert!(src.contains("#let bp-title"));
-        assert!(!src.contains("#bp-heading("), "no blocks → no section markup");
+        assert!(
+            !src.contains("#bp-heading("),
+            "no blocks → no section markup"
+        );
     }
 
     #[tokio::test]

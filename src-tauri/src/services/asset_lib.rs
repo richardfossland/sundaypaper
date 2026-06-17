@@ -159,8 +159,8 @@ impl AssetLibRepo {
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
-        .bind(kind_str)       // existing free-text `kind`
-        .bind(kind_str)       // new typed `asset_kind`
+        .bind(kind_str) // existing free-text `kind`
+        .bind(kind_str) // new typed `asset_kind`
         .bind(name)
         .bind(file_path)
         .bind(tags)
@@ -269,7 +269,11 @@ mod tests {
             AssetKind::Font,
         ] {
             let s = kind.as_str();
-            assert_eq!(AssetKind::from_db(s), kind, "round-trip failed for {kind:?}");
+            assert_eq!(
+                AssetKind::from_db(s),
+                kind,
+                "round-trip failed for {kind:?}"
+            );
         }
     }
 
@@ -284,7 +288,12 @@ mod tests {
     async fn add_logo_and_retrieve_it() {
         let repo = repo().await;
         let entry = repo
-            .add("Church Logo", AssetKind::Logo, "/assets/logo.svg", "brand,svg")
+            .add(
+                "Church Logo",
+                AssetKind::Logo,
+                "/assets/logo.svg",
+                "brand,svg",
+            )
             .await
             .unwrap();
         assert_eq!(entry.name, "Church Logo");
@@ -347,8 +356,12 @@ mod tests {
     #[tokio::test]
     async fn list_all_returns_everything() {
         let repo = repo().await;
-        repo.add("Logo", AssetKind::Logo, "/logo.png", "").await.unwrap();
-        repo.add("Font", AssetKind::Font, "/font.ttf", "").await.unwrap();
+        repo.add("Logo", AssetKind::Logo, "/logo.png", "")
+            .await
+            .unwrap();
+        repo.add("Font", AssetKind::Font, "/font.ttf", "")
+            .await
+            .unwrap();
         repo.add("Sheet", AssetKind::SongSheet, "/sheet.pdf", "")
             .await
             .unwrap();
@@ -376,7 +389,9 @@ mod tests {
     #[tokio::test]
     async fn list_filtered_returns_empty_when_no_match() {
         let repo = repo().await;
-        repo.add("Logo", AssetKind::Logo, "/logo.png", "").await.unwrap();
+        repo.add("Logo", AssetKind::Logo, "/logo.png", "")
+            .await
+            .unwrap();
         let fonts = repo.list(Some(AssetKind::Font)).await.unwrap();
         assert!(fonts.is_empty());
     }

@@ -50,10 +50,7 @@ pub async fn asset_list_lib(
 /// Soft-delete an asset from the library.
 /// Called as `"asset_delete_lib"` to avoid shadowing the base `asset_delete`.
 #[tauri::command]
-pub async fn asset_delete_lib(
-    state: State<'_, AppState>,
-    id: String,
-) -> AppResult<()> {
+pub async fn asset_delete_lib(state: State<'_, AppState>, id: String) -> AppResult<()> {
     AssetLibRepo::new(state.db.clone()).delete(&id).await
 }
 

@@ -18,9 +18,6 @@ use crate::AppState;
 /// When built without the `pdf` cargo feature this returns a
 /// `feature_disabled` error the renderer can surface as "upgrade this build".
 #[tauri::command]
-pub async fn pdf_page_count(
-    _state: State<'_, AppState>,
-    path: String,
-) -> AppResult<usize> {
+pub async fn pdf_page_count(_state: State<'_, AppState>, path: String) -> AppResult<usize> {
     pdf_ops::pdf_page_count(Path::new(&path))
 }

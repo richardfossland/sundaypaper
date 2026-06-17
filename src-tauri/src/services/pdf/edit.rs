@@ -362,7 +362,10 @@ mod tests {
         });
 
         // Sanity: page_a (visual first) really does have the higher ObjectId.
-        assert!(page_a.0 > page_b.0, "fixture must reverse id vs visual order");
+        assert!(
+            page_a.0 > page_b.0,
+            "fixture must reverse id vs visual order"
+        );
 
         // Kids in VISUAL order: page A (width 201) first, page B (width 202) next.
         let kids = vec![page_a.into(), page_b.into()];

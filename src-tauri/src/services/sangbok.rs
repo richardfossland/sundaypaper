@@ -239,13 +239,11 @@ impl SangbokRepo {
 
         let now = now_ms();
         // Advance to Processing.
-        sqlx::query(
-            "UPDATE sangbok_job SET status = 'Processing', updated_at = ? WHERE id = ?",
-        )
-        .bind(now)
-        .bind(id)
-        .execute(&self.db.pool)
-        .await?;
+        sqlx::query("UPDATE sangbok_job SET status = 'Processing', updated_at = ? WHERE id = ?")
+            .bind(now)
+            .bind(id)
+            .execute(&self.db.pool)
+            .await?;
 
         // OCR STUB — no actual OCR performed.
         // The state-machine transitions to Done; songs_found stays empty.
