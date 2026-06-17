@@ -54,6 +54,11 @@ export type { ExportOptions } from "./ExportOptions";
 export type { ExportedFile } from "./ExportedFile";
 export type { BatchExportResult } from "./BatchExportResult";
 
+// Intent→Layout AI compiler (services/ai). Pure request/response types; the
+// HTTP call is feature-gated in Rust.
+export type { IntentRequest } from "./IntentRequest";
+export type { IntentCompileResult } from "./IntentCompileResult";
+
 /** Error shape returned by every Tauri command (see error.rs).
  *  Keep this union in sync with `AppError::code()` in Rust. */
 export interface AppError {

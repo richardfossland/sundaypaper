@@ -42,6 +42,7 @@ const { ipcMock, FakeIPCError } = vi.hoisted(() => {
         render: vi.fn(),
         typstCompile: vi.fn(),
       },
+      ai: { compileIntent: vi.fn() },
     },
   };
 });
@@ -115,6 +116,7 @@ beforeEach(() => {
   ipcMock.bulletin.generateFromPlan.mockResolvedValue(DOC);
   ipcMock.bulletin.render.mockResolvedValue("#set page()\nHei");
   ipcMock.bulletin.typstCompile.mockResolvedValue(PDF_B64);
+  ipcMock.ai.compileIntent.mockResolvedValue(DOC);
 });
 
 afterEach(() => cleanup());
@@ -242,6 +244,61 @@ describe("BuilderPage", () => {
     expect(
       await screen.findByRole("button", { name: /Lag PDF/ }),
     ).toBeInTheDocument();
+  });
+
+  it("compiles a free-text intent into a program via the AI prompt bar", async () => {
+    renderPage();
+    await screen.findByRole("option", { name: "Sommer 2026" });
+    selectProject();
+
+    // Reveal the AI affordance.
+    fireEvent.click(screen.getByRole("button", { name: /Lag med AI/ }));
+
+    const intent =
+      "lag søndagens program for 1. søndag i advent med to salmer og dåp";
+    fireEvent.change(screen.getByLabelText("AI-intensjon"), {
+      target: { value: intent },
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Lag program med AI$/ }),
+    );
+
+    await waitFor(() =>
+      expect(ipcMock.ai.compileIntent).toHaveBeenCalledWith("proj-1", intent),
+    );
+
+    // The document card appears once the AI compile resolves — same downstream
+    // flow as the manual builder.
+    expect(
+      await screen.findByRole("button", { name: /Lag PDF/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("surfaces 'AI ikke aktivert' when cloud AI is off (feature/consent gate)", async () => {
+    // The backend rejects with a feature_disabled/validation IPCError carrying
+    // the user-facing message; the prompt bar shows it and creates nothing.
+    ipcMock.ai.compileIntent.mockRejectedValueOnce(
+      new FakeIPCError("feature_disabled", "AI ikke aktivert"),
+    );
+
+    renderPage();
+    await screen.findByRole("option", { name: "Sommer 2026" });
+    selectProject();
+
+    fireEvent.click(screen.getByRole("button", { name: /Lag med AI/ }));
+    fireEvent.change(screen.getByLabelText("AI-intensjon"), {
+      target: { value: "lag et program" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Lag program med AI$/ }),
+    );
+
+    // Error banner shows the message; no document card.
+    expect(await screen.findByText(/AI ikke aktivert/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Lag PDF/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("matches the empty-state snapshot", async () => {

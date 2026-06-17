@@ -64,6 +64,16 @@ typst = { version = "0.14", optional = true }
 typst-pdf = { version = "0.14", optional = true }
 typst-assets = { version = "0.14", features = ["fonts"], optional = true }
 
+# Intent→Layout AI compiler (Phase 5), behind the `ai` feature — see [features]
+# below. `reqwest` is the HTTPS client for the Anthropic Messages API; the
+# pure request-builder + response-parser (`services::ai::{prompt,parse}`) are
+# ALWAYS compiled and unit-tested with canned JSON, so the gate needs no key and
+# no network. Only the in-process HTTP call (`services::ai::client`) lives here.
+# `rustls` keeps the build free of a system OpenSSL dependency, matching the
+# rest of the suite. reqwest is already in the lock (a sunday-auth transitive),
+# so enabling this adds no new third-party crate.
+reqwest = { version = "0.13", optional = true, default-features = false, features = ["json", "rustls", "http2"] }
+
 [dev-dependencies]
 tempfile = "3"
 
@@ -81,6 +91,15 @@ pdf = ["dep:lopdf", "dep:pdfium-render", "dep:image"]
 # enabled path needs no system fonts or files. Enable with
 # `cargo test --features typst`.
 typst = ["dep:typst", "dep:typst-pdf", "dep:typst-assets"]
+# Intent→Layout AI compiler (Phase 5) — turns a free-text intent into a
+# populated block tree via the Anthropic Messages API (tool-use / JSON schema),
+# which then flows through the proven build_bulletin → layout::markup → Typst
+# pipeline unchanged. The default build compiles without it and
+# `services::ai::client::compile_intent` returns a clear `feature_disabled`
+# error (surfaced in the UI as "AI ikke aktivert"); the pure request-builder and
+# response-parser are always built and unit-tested with canned JSON. The key is
+# read from the OS keychain / local setting at call time, never bundled. Enable
+# with `cargo test --features ai`.
+ai = ["dep:reqwest"]
 # Later phases add more optional native deps behind features:
-#   ai  = ["dep:reqwest"]   # Anthropic client (Phase 5)
 #   ocr = ["dep:leptess"]   # Tesseract OCR (Phase 3.1)

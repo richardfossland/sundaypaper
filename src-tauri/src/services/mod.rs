@@ -22,11 +22,15 @@
 //!     mirror → `bulletin` (the canonical Plan→Paper adapter; golden-fixture
 //!     round-trip tested)
 //!
+//! Phase 5:
+//!   - `ai`  intent→layout compiler: free-text intent → block tree via the
+//!     Anthropic Messages API. Pure request-builder + response-parser are
+//!     always built and unit-tested; the HTTP call is behind the `ai` feature.
+//!
 //! Planned modules (added in their phases):
 //!   - `ocr`    Tesseract pipeline for scanned songbooks (Phase 3.1)
-//!   - `layout` Typst engine: block tree → PDF (Phase 4.2)
-//!   - `ai`     hybrid local/Claude provider (Phase 5.1)
 
+pub mod ai;
 pub mod asset;
 pub mod asset_lib;
 pub mod block;
