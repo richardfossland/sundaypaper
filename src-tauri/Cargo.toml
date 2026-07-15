@@ -37,7 +37,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Data layer — local-first SQLite via sqlx. Runtime-checked queries (no
 # DATABASE_URL / .sqlx needed at compile time).
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "migrate"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "migrate"] }
 tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v7"] }
 
