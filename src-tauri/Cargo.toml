@@ -42,7 +42,7 @@ tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v7"] }
 
 # Type generation for the frontend (run with `cargo test export_bindings`)
-ts-rs = { version = "11", features = ["serde-compat"] }
+ts-rs = { version = "12", features = ["serde-compat"] }
 
 # PDF layer (Phase 1.2), behind the `pdf` feature — see [features] below.
 # lopdf is pure Rust (split/merge/rotate/extract, fully testable). pdfium-render
