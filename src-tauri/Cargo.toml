@@ -62,7 +62,7 @@ image = { version = "0.25.10", default-features = false, features = ["png"], opt
 # in-memory compile step lives here.
 typst = { version = "0.14", optional = true }
 typst-pdf = { version = "0.14", optional = true }
-typst-assets = { version = "0.14", features = ["fonts"], optional = true }
+typst-assets = { version = "0.15", features = ["fonts"], optional = true }
 
 # Intent→Layout AI compiler (Phase 5), behind the `ai` feature — see [features]
 # below. `reqwest` is the HTTPS client for the Anthropic Messages API; the
