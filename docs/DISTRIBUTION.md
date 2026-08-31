@@ -14,9 +14,16 @@ Cut a release:
 ```sh
 npm version <patch|minor|major>          # bumps package.json
 # bump src-tauri/tauri.conf.json "version" to match (and Cargo.toml if desired)
+# write docs/release-notes/vX.Y.Z.md — the text the user reads in the update
+# banner. CI refuses the PR without it, and release.yml refuses the tag.
 git commit -am "chore: release vX.Y.Z"
 git tag vX.Y.Z && git push origin vX.Y.Z
 ```
+
+The release note lives in the repo on purpose — see
+[release-notes/README.md](release-notes/README.md). `latest.json`'s `notes`
+field is written at build time, so a note added to the GitHub release
+afterwards never reaches the manifest, and therefore never reaches the user.
 
 Review the draft release, then publish it. Installed apps then pick up the
 update from the `releases/latest/download/latest.json` endpoint configured in

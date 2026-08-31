@@ -31,10 +31,25 @@ export function UpdateBanner() {
             Oppdatering tilgjengelig
             {update.version ? ` (${update.version})` : ""}
           </p>
-          <p className="mt-1 text-xs text-[var(--color-fg-muted)]">
-            En nyere versjon av SundayPaper er klar. Last ned og start på nytt
-            for å oppdatere.
-          </p>
+          {/* HVA som er nytt — fra manifestets `notes`, som siden
+              `docs/release-notes/<tagg>.md` er en tekst et menneske har skrevet
+              til brukeren og ikke en fast setning fra byggefila. Tillegget har
+              båret `body` hele veien hit; banneret kastet det og skrev bare
+              versjonsnummeret, så hver oppdatering så lik ut som forrige.
+
+              Ren tekst med bevarte linjeskift, ikke markdown — vakten i
+              `scripts/release-notes.mjs` avviser markdown i notatet nettopp
+              fordi denne boksen ikke har noen renderer å vise det med. */}
+          {update.body?.trim() ? (
+            <p className="mt-2 max-h-48 overflow-y-auto text-xs whitespace-pre-line text-[var(--color-fg)]">
+              {update.body.trim()}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-[var(--color-fg-muted)]">
+              En nyere versjon av SundayPaper er klar. Last ned og start på nytt
+              for å oppdatere.
+            </p>
+          )}
         </div>
         <button
           type="button"
