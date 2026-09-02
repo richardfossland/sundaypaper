@@ -48,7 +48,7 @@ ts-rs = { version = "12", features = ["serde-compat"] }
 # lopdf is pure Rust (split/merge/rotate/extract, fully testable). pdfium-render
 # + image cover rasterised render + text extraction and need the pdfium dynamic
 # library present at runtime.
-lopdf = { version = "0.40.0", optional = true }
+lopdf = { version = "0.44.0", optional = true }
 # `image_025` selects pdfium-render's image integration pinned to image 0.25,
 # matching our `image` dep so `PdfBitmap::as_image()` returns a unified type.
 pdfium-render = { version = "0.9.1", optional = true, features = ["image_025"] }
