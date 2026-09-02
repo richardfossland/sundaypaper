@@ -60,7 +60,7 @@ image = { version = "0.25.10", default-features = false, features = ["png"], opt
 # set of embedded fonts so compilation needs no system fonts or external files.
 # The pure source-string builder (`layout::markup`) is always compiled; only the
 # in-memory compile step lives here.
-typst = { version = "0.14", optional = true }
+typst = { version = "0.15", optional = true }
 typst-pdf = { version = "0.14", optional = true }
 typst-assets = { version = "0.15", features = ["fonts"], optional = true }
 
