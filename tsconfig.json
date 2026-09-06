@@ -21,9 +21,10 @@
     "noFallthroughCasesInSwitch": true,
 
     /* Path aliases — keep in sync with vite.config.ts */
-    "baseUrl": ".",
+    /* TS 7 removed `baseUrl`; `paths` targets are now resolved relative to
+       this file and must be written with a leading "./". */
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src"],
