@@ -322,7 +322,7 @@ exports[`BuilderPage > matches the empty-state snapshot 1`] = `
                   >
                     <svg
                       aria-hidden="true"
-                      class="lucide lucide-trash2 lucide-trash-2"
+                      class="lucide lucide-trash lucide-trash-2"
                       fill="none"
                       height="14"
                       stroke="currentColor"
@@ -376,7 +376,7 @@ exports[`BuilderPage > matches the empty-state snapshot 1`] = `
           >
             <svg
               aria-hidden="true"
-              class="lucide lucide-file-plus-corner"
+              class="lucide lucide-file-plus-corner lucide-file-plus-2"
               fill="none"
               height="16"
               stroke="currentColor"
@@ -412,7 +412,7 @@ exports[`BuilderPage > matches the empty-state snapshot 1`] = `
             >
               <svg
                 aria-hidden="true"
-                class="lucide lucide-sparkles"
+                class="lucide lucide-sparkles lucide-stars"
                 fill="none"
                 height="13"
                 stroke="currentColor"
@@ -499,7 +499,7 @@ exports[`BuilderPage > matches the empty-state snapshot 1`] = `
         >
           <svg
             aria-hidden="true"
-            class="lucide lucide-sparkles mx-auto mb-3 text-[var(--color-fg-muted)] opacity-40"
+            class="lucide lucide-sparkles lucide-stars mx-auto mb-3 text-[var(--color-fg-muted)] opacity-40"
             fill="none"
             height="40"
             stroke="currentColor"
