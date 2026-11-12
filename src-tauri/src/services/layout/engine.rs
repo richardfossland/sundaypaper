@@ -146,7 +146,7 @@ mod enabled {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::services::layout::markup::{build_typst_document, LayoutMeta, RenderBlock};
+        use crate::services::layout::markup::{LayoutMeta, RenderBlock, build_typst_document};
         use serde_json::json;
 
         /// The standard PDF header. Every PDF file starts with `%PDF-`.

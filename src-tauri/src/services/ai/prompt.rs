@@ -14,7 +14,7 @@
 //! trust boundary (see `parse`).
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use ts_rs::TS;
 
 use crate::error::{AppError, AppResult};
@@ -313,10 +313,11 @@ mod tests {
     #[test]
     fn tool_schema_enumerates_exactly_the_allowed_kinds() {
         let body = build_request(&req("program")).unwrap();
-        let kind_enum = body["tools"][0]["input_schema"]["properties"]["blocks"]["items"]
-            ["properties"]["kind"]["enum"]
-            .as_array()
-            .expect("kind enum present");
+        let kind_enum =
+            body["tools"][0]["input_schema"]["properties"]["blocks"]["items"]["properties"]["kind"]
+                ["enum"]
+                .as_array()
+                .expect("kind enum present");
         let kinds: Vec<&str> = kind_enum.iter().map(|v| v.as_str().unwrap()).collect();
         assert_eq!(kinds, ALLOWED_KINDS, "schema enum matches the catalogue");
         // The form-field kinds must NOT be offered (privacy: no member content).

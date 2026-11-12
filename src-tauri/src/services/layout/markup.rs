@@ -530,17 +530,17 @@ fn render_song(d: &serde_json::Value) -> String {
             escape_content(verse)
         ));
         // Print the refrain after the first verse only.
-        if i == 0 {
-            if let Some(r) = &refrain {
-                s.push_str(&format!("#bp-refrain([{}])\n", escape_content(r)));
-            }
+        if i == 0
+            && let Some(r) = &refrain
+        {
+            s.push_str(&format!("#bp-refrain([{}])\n", escape_content(r)));
         }
     }
     // A refrain with no verses at all still gets printed once.
-    if verses.is_empty() {
-        if let Some(r) = &refrain {
-            s.push_str(&format!("#bp-refrain([{}])\n", escape_content(r)));
-        }
+    if verses.is_empty()
+        && let Some(r) = &refrain
+    {
+        s.push_str(&format!("#bp-refrain([{}])\n", escape_content(r)));
     }
 
     if let Some(c) = field(d, "copyright") {
@@ -575,10 +575,10 @@ fn render_scripture(d: &serde_json::Value) -> String {
         content_arg(&heading.or_else(|| Some("Reading".to_string())))
     );
     // If the heading was a custom title, still print the reference under it.
-    if field(d, "title").is_some() {
-        if let Some(r) = reference {
-            s.push_str(&format!("#bp-byline({})\n", content_arg(&Some(r))));
-        }
+    if field(d, "title").is_some()
+        && let Some(r) = reference
+    {
+        s.push_str(&format!("#bp-byline({})\n", content_arg(&Some(r))));
     }
     if let Some(reader) = field(d, "reader") {
         s.push_str(&format!("#bp-byline({})\n", content_arg(&Some(reader))));
@@ -991,7 +991,9 @@ mod tests {
             }),
         );
         let src = doc(&[b]);
-        assert!(src.contains("#bp-title([Sunday Worship], sub: [St. Olav's], date: [1 June 2026])"));
+        assert!(
+            src.contains("#bp-title([Sunday Worship], sub: [St. Olav's], date: [1 June 2026])")
+        );
     }
 
     #[test]

@@ -290,7 +290,7 @@ fn number(o: &Object) -> Option<f64> {
 mod tests {
     use super::*;
     use lopdf::content::Content;
-    use lopdf::{dictionary, Stream};
+    use lopdf::{Stream, dictionary};
 
     /// Build a minimal valid `n`-page PDF at `path` (A4 pages, empty content).
     fn build_pdf(path: &Path, n: u32) {

@@ -15,13 +15,13 @@
 
 use tauri::State;
 
+use crate::AppState;
 use crate::commands::bulletin::persist_program;
 use crate::error::{AppError, AppResult};
 use crate::services::ai::client::compile_intent;
-use crate::services::ai::prompt::{IntentRequest, DEFAULT_PURPOSE};
+use crate::services::ai::prompt::{DEFAULT_PURPOSE, IntentRequest};
 use crate::services::document::Document;
 use crate::services::setting::SettingRepo;
-use crate::AppState;
 
 /// Local setting keys — kept in sync with the frontend `SETTING_KEYS`
 /// (`src/features/settings/settings-keys.ts`).

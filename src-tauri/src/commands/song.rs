@@ -2,9 +2,9 @@
 
 use tauri::State;
 
+use crate::AppState;
 use crate::error::AppResult;
 use crate::services::song::{Song, SongInput, SongRepo};
-use crate::AppState;
 
 #[tauri::command]
 pub async fn song_create(

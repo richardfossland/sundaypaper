@@ -9,14 +9,14 @@
 
 use tauri::State;
 
+use crate::AppState;
 use crate::error::AppResult;
 use crate::services::block::{Block, BlockRepo};
-use crate::services::bulletin::{build_bulletin, BlockSpec, ServicePlan};
-use crate::services::bulletin_contract::{bulletin_from_contract, ContractServicePlan};
+use crate::services::bulletin::{BlockSpec, ServicePlan, build_bulletin};
+use crate::services::bulletin_contract::{ContractServicePlan, bulletin_from_contract};
 use crate::services::document::{Document, DocumentRepo};
 use crate::services::layout::engine;
-use crate::services::layout::markup::{build_typst_document, LayoutMeta, RenderBlock};
-use crate::AppState;
+use crate::services::layout::markup::{LayoutMeta, RenderBlock, build_typst_document};
 
 /// Generate a printable program document from a planned service.
 ///
@@ -505,7 +505,7 @@ mod tests {
 
     #[tokio::test]
     async fn from_plan_rejects_malformed_json_before_touching_db() {
-        use crate::services::bulletin_contract::{bulletin_from_contract, ContractServicePlan};
+        use crate::services::bulletin_contract::{ContractServicePlan, bulletin_from_contract};
 
         // A bad paste must fail as a `json` error in the deserialise step (the
         // command's `?`), before any document is created.

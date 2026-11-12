@@ -9,9 +9,9 @@ use std::path::Path;
 
 use tauri::State;
 
+use crate::AppState;
 use crate::error::AppResult;
 use crate::services::pdf_ops;
-use crate::AppState;
 
 /// Return the number of pages in the PDF at `path`.
 ///

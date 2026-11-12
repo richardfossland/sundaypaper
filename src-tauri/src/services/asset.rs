@@ -8,7 +8,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
-use crate::services::db::{now_ms, Db};
+use crate::services::db::{Db, now_ms};
 
 /// A file asset in the library.
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, sqlx::FromRow)]
@@ -87,12 +87,12 @@ impl AssetRepo {
         if input.path.trim().is_empty() {
             return Err(AppError::Validation("asset path is required".into()));
         }
-        if let Some(mime) = input.mime {
-            if !is_allowed_mime(mime) {
-                return Err(AppError::Validation(format!(
-                    "unsupported asset type '{mime}'; only images, PDFs and fonts are allowed"
-                )));
-            }
+        if let Some(mime) = input.mime
+            && !is_allowed_mime(mime)
+        {
+            return Err(AppError::Validation(format!(
+                "unsupported asset type '{mime}'; only images, PDFs and fonts are allowed"
+            )));
         }
         let id = Uuid::now_v7().to_string();
         let now = now_ms();

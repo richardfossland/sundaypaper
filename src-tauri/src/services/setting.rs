@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::error::{AppError, AppResult};
-use crate::services::db::{now_ms, Db};
+use crate::services::db::{Db, now_ms};
 
 /// A single key/value setting.
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, sqlx::FromRow)]

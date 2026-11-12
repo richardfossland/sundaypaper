@@ -2,9 +2,9 @@
 
 use tauri::State;
 
+use crate::AppState;
 use crate::error::AppResult;
 use crate::services::template::{Template, TemplateRepo};
-use crate::AppState;
 
 #[tauri::command]
 pub async fn template_create(

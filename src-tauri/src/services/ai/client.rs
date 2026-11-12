@@ -25,8 +25,8 @@ mod enabled {
     use std::time::Duration;
 
     use crate::error::{AppError, AppResult};
-    use crate::services::ai::parse::{parse_block_tree, IntentCompileResult};
-    use crate::services::ai::prompt::{build_request, IntentRequest, ANTHROPIC_VERSION};
+    use crate::services::ai::parse::{IntentCompileResult, parse_block_tree};
+    use crate::services::ai::prompt::{ANTHROPIC_VERSION, IntentRequest, build_request};
 
     use super::MESSAGES_URL;
 

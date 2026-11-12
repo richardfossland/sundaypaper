@@ -2,9 +2,9 @@
 
 use tauri::State;
 
+use crate::AppState;
 use crate::error::AppResult;
 use crate::services::document::{Document, DocumentRepo};
-use crate::AppState;
 
 #[tauri::command]
 pub async fn document_create(

@@ -37,7 +37,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::AppResult;
 use crate::services::bulletin::{
-    build_bulletin, BlockSpec, ScriptureRef, ServicePlan, SetlistItem, SetlistItemKind, SongRef,
+    BlockSpec, ScriptureRef, ServicePlan, SetlistItem, SetlistItemKind, SongRef, build_bulletin,
 };
 
 /// Canonical running-order item kind from the published `sunday-contracts`

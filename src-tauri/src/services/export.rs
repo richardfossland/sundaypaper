@@ -111,12 +111,12 @@ pub fn validate_request(document_ids: &[String], options: &ExportOptions) -> App
         }
     }
 
-    if let Some(pct) = options.large_print_percent {
-        if !(MIN_SCALE_PERCENT..=MAX_SCALE_PERCENT).contains(&pct) {
-            return Err(AppError::Validation(format!(
-                "large-print scaling must be {MIN_SCALE_PERCENT}–{MAX_SCALE_PERCENT}%, got {pct}%"
-            )));
-        }
+    if let Some(pct) = options.large_print_percent
+        && !(MIN_SCALE_PERCENT..=MAX_SCALE_PERCENT).contains(&pct)
+    {
+        return Err(AppError::Validation(format!(
+            "large-print scaling must be {MIN_SCALE_PERCENT}–{MAX_SCALE_PERCENT}%, got {pct}%"
+        )));
     }
 
     Ok(())

@@ -2,9 +2,9 @@
 
 use tauri::State;
 
+use crate::AppState;
 use crate::error::AppResult;
 use crate::services::setting::{Setting, SettingRepo};
-use crate::AppState;
 
 #[tauri::command]
 pub async fn setting_get(state: State<'_, AppState>, key: String) -> AppResult<Option<String>> {

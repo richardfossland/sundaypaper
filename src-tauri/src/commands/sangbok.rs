@@ -2,9 +2,9 @@
 
 use tauri::State;
 
+use crate::AppState;
 use crate::error::AppResult;
 use crate::services::sangbok::{SangbokJob, SangbokRepo};
-use crate::AppState;
 
 /// Queue a new sangbok import job for `pdf_path`.
 #[tauri::command]
