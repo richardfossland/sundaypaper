@@ -10,9 +10,9 @@
 
 use tauri::State;
 
+use crate::AppState;
 use crate::error::AppResult;
 use crate::services::asset_lib::{AssetKind, AssetLibEntry, AssetLibRepo};
-use crate::AppState;
 
 /// Register a file in the asset library.
 ///

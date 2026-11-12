@@ -91,7 +91,7 @@ mod tests {
     #[cfg(feature = "pdf")]
     fn build_test_pdf(path: &Path, n: u32) {
         use lopdf::content::Content;
-        use lopdf::{dictionary, Document, Object, Stream};
+        use lopdf::{Document, Object, Stream, dictionary};
 
         let mut doc = Document::with_version("1.5");
         let pages_id = doc.new_object_id();
@@ -135,7 +135,7 @@ mod tests {
     #[cfg(feature = "pdf")]
     fn build_marked_pdf(path: &Path, n: u32) {
         use lopdf::content::Content;
-        use lopdf::{dictionary, Document, Object, Stream};
+        use lopdf::{Document, Object, Stream, dictionary};
 
         let mut doc = Document::with_version("1.5");
         let pages_id = doc.new_object_id();

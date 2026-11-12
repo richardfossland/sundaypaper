@@ -40,5 +40,5 @@ pub mod client;
 pub mod parse;
 pub mod prompt;
 
-pub use parse::{parse_block_tree, IntentCompileResult};
-pub use prompt::{build_request, IntentRequest, MODEL_ID};
+pub use parse::{IntentCompileResult, parse_block_tree};
+pub use prompt::{IntentRequest, MODEL_ID, build_request};

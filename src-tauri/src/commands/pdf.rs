@@ -9,9 +9,9 @@ use std::path::Path;
 
 use tauri::State;
 
+use crate::AppState;
 use crate::error::AppResult;
 use crate::services::pdf::{self, PdfInfo};
-use crate::AppState;
 
 #[tauri::command]
 pub async fn pdf_info(_state: State<'_, AppState>, path: String) -> AppResult<PdfInfo> {

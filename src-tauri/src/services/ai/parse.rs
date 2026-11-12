@@ -24,7 +24,7 @@ use serde_json::Value;
 use ts_rs::TS;
 
 use crate::error::{AppError, AppResult};
-use crate::services::ai::prompt::{is_allowed_kind, TOOL_NAME};
+use crate::services::ai::prompt::{TOOL_NAME, is_allowed_kind};
 use crate::services::bulletin::BlockSpec;
 
 /// The result of compiling an intent: the ordered specs plus a little metadata

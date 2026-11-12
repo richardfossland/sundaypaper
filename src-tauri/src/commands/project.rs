@@ -3,9 +3,9 @@
 
 use tauri::State;
 
+use crate::AppState;
 use crate::error::AppResult;
 use crate::services::project::{Project, ProjectRepo};
-use crate::AppState;
 
 #[tauri::command]
 pub async fn project_create(

@@ -19,7 +19,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
-use crate::services::db::{now_ms, Db};
+use crate::services::db::{Db, now_ms};
 
 // ── Status enum ───────────────────────────────────────────────────────────────
 
@@ -916,11 +916,12 @@ mod tests {
         assert_eq!(done.songs_found.len(), 2);
         assert_eq!(done.songs_found[0].title_hint, "Amazing Grace");
         assert_eq!(done.songs_found[1].title_hint, "Be Thou My Vision");
-        assert!(done
-            .error_detail
-            .as_deref()
-            .unwrap_or("")
-            .contains("segmented 2"));
+        assert!(
+            done.error_detail
+                .as_deref()
+                .unwrap_or("")
+                .contains("segmented 2")
+        );
     }
 
     #[tokio::test]

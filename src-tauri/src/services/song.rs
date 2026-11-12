@@ -7,7 +7,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
-use crate::services::db::{now_ms, Db};
+use crate::services::db::{Db, now_ms};
 
 /// A song in the catalog.
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq, sqlx::FromRow)]

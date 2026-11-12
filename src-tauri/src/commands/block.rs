@@ -2,9 +2,9 @@
 
 use tauri::State;
 
+use crate::AppState;
 use crate::error::AppResult;
 use crate::services::block::{Block, BlockRepo};
-use crate::AppState;
 
 #[tauri::command]
 pub async fn block_create(

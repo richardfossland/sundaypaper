@@ -4,9 +4,9 @@ use std::collections::HashMap;
 
 use tauri::State;
 
+use crate::AppState;
 use crate::error::AppResult;
 use crate::services::doc_template::{DocTemplate, DocTemplateRepo, TemplateVarInput};
-use crate::AppState;
 
 #[tauri::command]
 pub async fn doc_template_create(

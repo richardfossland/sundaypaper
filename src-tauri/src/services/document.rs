@@ -7,7 +7,7 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};
-use crate::services::db::{now_ms, Db};
+use crate::services::db::{Db, now_ms};
 
 /// A document within a project. `kind` selects the document family (program,
 /// song_sheet, magazine, poster, form); `position` orders it within the project.
